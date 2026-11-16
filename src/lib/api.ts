@@ -1,4 +1,9 @@
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1'
+// Production always calls /api/v1 on its own address; the host proxies it to
+// the backend (functions/api/[[path]].ts on Cloudflare Pages). That keeps the
+// sign-in cookie first-party: calling the backend's own domain makes it a
+// cross-site cookie the browser never sends back, so every request after
+// sign-in fails with 401 missing_credentials. Development uses VITE_API_URL.
+const API_URL = import.meta.env.DEV ? (import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1') : '/api/v1'
 
 export class ApiError extends Error {
   status: number
