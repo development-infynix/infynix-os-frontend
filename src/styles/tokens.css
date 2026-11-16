@@ -1,0 +1,181 @@
+/*
+ * Infynix OS design tokens: the single source of truth for every design value.
+ *
+ * Components never hard-code a colour, size, shadow or duration: they use the
+ * Tailwind utilities generated from the @theme block below (bg-surface,
+ * text-body, h-header, shadow-dialog, ease-out-expo, ...) or the component
+ * classes in index.css, which read these variables. DESIGN.md explains how to
+ * use them; if the two disagree, this file wins.
+ *
+ * Themes: :root is light; [data-theme='dark'] on <html> is dark.
+ *   primary   = the main action colour, one per theme (near-black / near-white)
+ *   secondary = ink green #017C5F, the brand: active navigation, role tags, links
+ */
+
+/* ── Colour, depth, controls: light ─────────────────────────────────────── */
+:root {
+  color-scheme: light;
+
+  /* Swiss paper: warm off-white surfaces on a light stone ground, warm inks. */
+  --canvas: #f3f0e8;
+  --surface: #fbf9f4;
+  --surface-hover: #ede9df;
+
+  --ink: #1b1915;
+  --ink-2: #4b4740;
+  --ink-3: #6b665c;
+
+  --line: #e3ded2;
+  --line-strong: #d0c9ba;
+
+  --primary: #017c5f; /* ink green: the main action colour in both themes */
+  --on-primary: #ffffff;
+
+  --secondary: #017c5f;
+  --secondary-text: #017c5f;
+  --secondary-soft: #e9f2eb;
+  --on-secondary: #ffffff;
+
+  --danger: #c4321f;
+  --on-danger: #ffffff;
+  --danger-soft: #f9e9e3;
+
+  --focus: #017c5f;
+  --loader-color: var(--secondary);
+  --grid-dot: #dcd6c8;
+  --scrim: rgb(43 36 24 / 0.32);
+  --scrim-blur: 6px; /* blurs the page behind dialogs, modals and drawers */
+
+  /* Shadows are warm too, so depth reads as paper, not grey plastic. */
+  --shadow-lift: 0 0 0 1px rgb(43 36 24 / 0.07), 0 1px 2px -1px rgb(43 36 24 / 0.08),
+    0 4px 12px -2px rgb(43 36 24 / 0.06);
+  --shadow-dialog: 0 0 0 1px rgb(43 36 24 / 0.07), 0 8px 16px -4px rgb(43 36 24 / 0.1),
+    0 24px 48px -12px rgb(43 36 24 / 0.18);
+
+  /* Buttons: lit from above (gradient + top highlight + ring + short drop). */
+  --btn-primary-bg: linear-gradient(180deg, #03936f 0%, #017c5f 100%);
+  --btn-primary-shadow: 0 0 0 1px #016a51, inset 0 1px 0 rgb(255 255 255 / 0.2),
+    0 1px 2px rgb(43 36 24 / 0.24), 0 2px 6px -2px rgb(43 36 24 / 0.2);
+  --btn-secondary-bg: linear-gradient(180deg, #fdfbf7 0%, #f2eee5 100%);
+  --btn-secondary-shadow: 0 0 0 1px rgb(43 36 24 / 0.13), inset 0 -1px 0 rgb(43 36 24 / 0.05),
+    0 1px 2px rgb(43 36 24 / 0.07);
+  --btn-danger-bg: linear-gradient(180deg, #d63e2a 0%, #b82d1b 100%);
+  --btn-danger-shadow: 0 0 0 1px #9e2616, inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 1px 2px rgb(158 38 22 / 0.3);
+  --btn-pressed: inset 0 1px 2px rgb(43 36 24 / 0.18);
+  --btn-hover-filter: brightness(1.04);
+  --btn-primary-hover-filter: brightness(1.06);
+}
+
+/* ── Colour, depth, controls: dark ──────────────────────────────────────── */
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --canvas: #0c0d0e;
+  --surface: #141517;
+  --surface-hover: #1c1d20;
+
+  --ink: #f4f4f5;
+  --ink-2: #b9bac1;
+  --ink-3: #8e8f98;
+
+  --line: #26272b;
+  --line-strong: #35363b;
+
+  --primary: #017c5f;
+  --on-primary: #ffffff;
+
+  --secondary: #017c5f;
+  --secondary-text: #3fbf94; /* ink green lifted for text contrast on dark */
+  --secondary-soft: #0f2a22;
+  --on-secondary: #ffffff;
+
+  --danger: #ff7b6b;
+  --on-danger: #ffffff; /* red buttons are the same in both themes */
+  --danger-soft: #2c1512;
+
+  --focus: #3fbf94;
+  --loader-color: var(--secondary-text);
+  --grid-dot: #1d1e21;
+  --scrim: rgb(0 0 0 / 0.6);
+
+  --shadow-lift: 0 0 0 1px rgb(255 255 255 / 0.07);
+  --shadow-dialog: 0 0 0 1px rgb(255 255 255 / 0.09), 0 24px 48px -12px rgb(0 0 0 / 0.6);
+
+  --btn-primary-bg: linear-gradient(180deg, #03936f 0%, #017c5f 100%);
+  --btn-primary-shadow: 0 0 0 1px rgb(63 191 148 / 0.35), inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 1px 2px rgb(0 0 0 / 0.5);
+  --btn-secondary-bg: linear-gradient(180deg, #25262a 0%, #1b1c1f 100%);
+  --btn-secondary-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.07),
+    0 1px 2px rgb(0 0 0 / 0.55);
+  --btn-danger-bg: linear-gradient(180deg, #d63e2a 0%, #b82d1b 100%);
+  --btn-danger-shadow: 0 0 0 1px rgb(255 120 100 / 0.35), inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 1px 2px rgb(0 0 0 / 0.5);
+  --btn-pressed: inset 0 1px 2px rgb(0 0 0 / 0.45);
+  --btn-primary-hover-filter: brightness(1.08);
+}
+
+/* ── Tailwind utilities generated from the tokens ───────────────────────── */
+@theme inline {
+  /* Type: Figtree, a compact working scale (rank by weight first, size second). */
+  --font-sans: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
+
+  --text-micro: 11px; /* role tags */
+  --text-micro--line-height: 16px;
+  --text-caption: 12px; /* secondary metadata, field errors */
+  --text-caption--line-height: 16px;
+  --text-label: 13px; /* form labels, notes, small buttons */
+  --text-label--line-height: 20px;
+  --text-body: 14px; /* default UI text, buttons, inputs */
+  --text-body--line-height: 21px;
+  --text-body-lg: 15px; /* page sublines */
+  --text-body-lg--line-height: 22px;
+  --text-title: 16px; /* dialog titles */
+  --text-title--line-height: 24px;
+  --text-display-sm: 26px; /* auth headings */
+  --text-display-sm--line-height: 1.15;
+  --text-display: 30px; /* page headings (mobile) */
+  --text-display--line-height: 1.15;
+  --text-display-lg: 34px; /* page headings (≥640px) */
+  --text-display-lg--line-height: 1.12;
+
+  --tracking-title: -0.01em;
+  --tracking-display: -0.025em;
+
+  /* Colour roles (values swap with the theme above). */
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-secondary: var(--secondary);
+  --color-secondary-text: var(--secondary-text);
+  --color-secondary-soft: var(--secondary-soft);
+  --color-on-secondary: var(--on-secondary);
+  --color-danger: var(--danger);
+  --color-on-danger: var(--on-danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-scrim: var(--scrim);
+
+  --shadow-lift: var(--shadow-lift);
+  --shadow-dialog: var(--shadow-dialog);
+
+  /* Layout. */
+  --spacing-sidebar: 248px;
+  --spacing-header: 52px;
+  --spacing-drawer: 280px;
+  --container-auth: 380px;
+  --container-dialog: 420px;
+  --container-sheet: 440px; /* side drawers (user details) */
+
+  /* Motion: fast, ease-out, never ease-in. */
+  --ease-out-expo: cubic-bezier(0.23, 1, 0.32, 1);
+  --duration-press: 120ms;
+  --duration-enter: 180ms;
+  --duration-drawer: 250ms;
+}

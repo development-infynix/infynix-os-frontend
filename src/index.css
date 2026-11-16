@@ -1,0 +1,256 @@
+@import '@fontsource-variable/figtree';
+@import 'tailwindcss';
+/* Every design value lives in tokens.css. Nothing below defines a raw value. */
+@import './styles/tokens.css';
+
+/* `dark:` follows the resolved theme on <html data-theme>, not only the OS. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@layer base {
+  html {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    min-height: 100dvh;
+  }
+  ::selection {
+    background: var(--secondary);
+    color: var(--on-secondary);
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  input {
+    caret-color: var(--secondary);
+  }
+  h1,
+  h2 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+@layer components {
+  /* Buttons: see <Button>. Lit from above; pressing flattens it. */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: var(--radius-lg);
+    font-weight: 600;
+    white-space: nowrap;
+    user-select: none;
+    transition:
+      filter var(--duration-press) ease-out,
+      box-shadow var(--duration-press) ease-out,
+      translate var(--duration-press) var(--ease-out-expo);
+  }
+  .btn:hover:not(:disabled) {
+    filter: var(--btn-hover-filter);
+  }
+  .btn-primary:hover:not(:disabled) {
+    filter: var(--btn-primary-hover-filter);
+  }
+  .btn:active:not(:disabled) {
+    translate: 0 0.5px;
+    box-shadow: var(--btn-pressed);
+  }
+  .btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .btn[aria-busy='true'] {
+    opacity: 0.85;
+    cursor: progress;
+  }
+  .btn-primary {
+    background: var(--btn-primary-bg);
+    box-shadow: var(--btn-primary-shadow);
+    color: var(--on-primary);
+  }
+  .btn-secondary {
+    background: var(--btn-secondary-bg);
+    box-shadow: var(--btn-secondary-shadow);
+    color: var(--ink);
+  }
+  .btn-danger {
+    background: var(--btn-danger-bg);
+    box-shadow: var(--btn-danger-shadow);
+    color: var(--on-danger);
+  }
+
+  /* Text inputs: white field, hairline ring; focus and invalid thicken it. */
+  .field-input {
+    display: block;
+    width: 100%;
+    height: 2.5rem;
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    padding-inline: 0.75rem;
+    font-size: var(--text-body);
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1px var(--line-strong);
+    outline: none;
+    transition: box-shadow var(--duration-press) ease-out;
+  }
+  .field-input::placeholder {
+    color: var(--ink-3);
+  }
+  .field-input:hover {
+    box-shadow: inset 0 0 0 1px var(--ink-3);
+  }
+  .field-input:focus {
+    box-shadow: inset 0 0 0 1.5px var(--focus);
+  }
+  .field-input[aria-invalid='true'] {
+    box-shadow: inset 0 0 0 1.5px var(--danger);
+  }
+
+  /* Loader: see <Loader>. Four bars grow in turn, each a beat after the last. */
+  .loader {
+    --loader-gap: 5px;
+    --loader-height: 23px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--loader-gap);
+    height: calc(var(--loader-height) * 1.8);
+  }
+  .loader-bar {
+    width: 6px;
+    height: var(--loader-height);
+    background: var(--loader-color);
+    animation: loader-grow 1s ease-in-out infinite;
+  }
+  .loader-bar:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .loader-bar:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  .loader-bar:nth-child(4) {
+    animation-delay: 0.475s;
+  }
+
+  /* Faint dotted grid behind the sign-in column, as on a planning canvas. */
+  .dot-grid {
+    background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+}
+
+/*
+ * Alert dialog: rises slightly and fades in, the scrim fades with it; both
+ * reverse on close (display/overlay are kept until the exit finishes).
+ */
+dialog.app-dialog {
+  opacity: 1;
+  translate: 0 0;
+  scale: 1;
+  transition:
+    opacity var(--duration-enter) var(--ease-out-expo),
+    translate var(--duration-enter) var(--ease-out-expo),
+    scale var(--duration-enter) var(--ease-out-expo),
+    overlay var(--duration-enter) allow-discrete,
+    display var(--duration-enter) allow-discrete;
+}
+dialog.app-dialog:not([open]) {
+  opacity: 0;
+  translate: 0 4px;
+  scale: 0.97;
+}
+dialog.app-dialog::backdrop {
+  backdrop-filter: blur(var(--scrim-blur));
+  -webkit-backdrop-filter: blur(var(--scrim-blur));
+  background: var(--scrim);
+  opacity: 1;
+  transition:
+    opacity var(--duration-enter) ease-out,
+    overlay var(--duration-enter) allow-discrete,
+    display var(--duration-enter) allow-discrete;
+}
+dialog.app-dialog:not([open])::backdrop {
+  opacity: 0;
+}
+@starting-style {
+  dialog.app-dialog[open] {
+    opacity: 0;
+    translate: 0 4px;
+    scale: 0.97;
+  }
+  dialog.app-dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+/*
+ * Side drawer (user details): a full-height panel pinned to the right that
+ * slides in over a scrim; slides back out on close.
+ */
+dialog.app-drawer {
+  margin: 0 0 0 auto;
+  height: 100dvh;
+  max-height: 100dvh;
+  translate: 0 0;
+  transition:
+    translate var(--duration-drawer) var(--ease-out-expo),
+    overlay var(--duration-drawer) allow-discrete,
+    display var(--duration-drawer) allow-discrete;
+}
+dialog.app-drawer:not([open]) {
+  translate: 100% 0;
+}
+dialog.app-drawer::backdrop {
+  backdrop-filter: blur(var(--scrim-blur));
+  -webkit-backdrop-filter: blur(var(--scrim-blur));
+  background: var(--scrim);
+  opacity: 1;
+  transition:
+    opacity var(--duration-drawer) ease-out,
+    overlay var(--duration-drawer) allow-discrete,
+    display var(--duration-drawer) allow-discrete;
+}
+dialog.app-drawer:not([open])::backdrop {
+  opacity: 0;
+}
+@starting-style {
+  dialog.app-drawer[open] {
+    translate: 100% 0;
+  }
+  dialog.app-drawer[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+@keyframes loader-grow {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(1.8);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
