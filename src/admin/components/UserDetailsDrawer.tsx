@@ -1,13 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye, EyeOff, Pencil, ShieldCheck, Trash2, UserCheck, UserX, X } from 'lucide-react'
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { AlertDialog } from '@/components/Alert'
 import { Button } from '@/components/Button'
 import { FormError, FormField } from '@/components/FormField'
 import { Loader } from '@/components/Loader'
 import { memberAccessQuery, setMemberAccess, type MemberAccess } from '@/lib/access'
 import { ApiError } from '@/lib/api'
-import { changeMyPassword, initials, ROLE_LABEL, sessionQuery, updateMyName, type MemberRole } from '@/lib/auth'
+import { changeMyPassword, ROLE_LABEL, sessionQuery, updateMyName, type MemberRole } from '@/lib/auth'
 import { timeAgo } from '@/lib/format'
 import { MEMBERS_KEY, removeMember, setMemberPassword, updateMember, type Member } from '@/lib/members'
 import { PASSWORD_HINT, strongPassword } from '@/lib/password-rules'
@@ -28,14 +28,15 @@ const failure = (error: unknown, fallback: string) =>
   error instanceof ApiError && error.status !== 500 ? error.message : fallback
 
 /**
- * A user's details in a panel that slides in from the right. View mode shows
- * the details with Edit, Deactivate/Activate and Delete; Edit switches the
- * same panel to a form (name, email, role, new password). Close is top-right.
+ * A member in a right-side sheet. The view switches between Details and
+ * Permissions tabs; Edit replaces the active panel with a form. Close is
+ * top-right, and destructive actions stay pinned at the bottom.
  */
 export function UserDetailsDrawer({ member, onClose, roles, isSelf }: UserDetailsDrawerProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState<'details' | 'permissions'>('details')
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -76,6 +77,26 @@ export function UserDetailsDrawer({ member, onClose, roles, isSelf }: UserDetail
     }
   }
 
+  const detailsTabId = `${titleId}-details-tab`
+  const permissionsTabId = `${titleId}-permissions-tab`
+  const detailsPanelId = `${titleId}-details-panel`
+  const permissionsPanelId = `${titleId}-permissions-panel`
+
+  function onTabKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (busy || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    const next =
+      event.key === 'Home'
+        ? 'details'
+        : event.key === 'End'
+          ? 'permissions'
+          : activeTab === 'details'
+            ? 'permissions'
+            : 'details'
+    setActiveTab(next)
+    document.getElementById(next === 'details' ? detailsTabId : permissionsTabId)?.focus()
+  }
+
   return (
     <>
       <dialog
@@ -92,27 +113,47 @@ export function UserDetailsDrawer({ member, onClose, roles, isSelf }: UserDetail
       >
         {member && (
           <div className="flex h-full flex-col">
-            {/* Header: who, and Close at the top right */}
-            <div className="flex items-start gap-3 border-b border-line px-5 py-4">
-              <span
-                aria-hidden
-                className={`grid size-10 shrink-0 place-items-center rounded-md text-body font-semibold ${
-                  member.isActive ? 'bg-secondary text-on-secondary' : 'bg-surface-hover text-ink-3'
-                }`}
-              >
-                {initials(member.fullName)}
-              </span>
-              <div className="min-w-0 flex-1 pt-0.5">
-                <h2 id={titleId} className="truncate text-title font-semibold tracking-title">
-                  {editing ? `Edit ${member.fullName}` : member.fullName}
-                </h2>
-                <p className="truncate text-label text-ink-3">{member.email}</p>
-              </div>
+            <h2 id={titleId} className="sr-only">
+              {member.fullName}
+            </h2>
+            {/* Header: the two views as a segmented tab control, Close at the right. */}
+            <div className="flex items-center gap-2 border-b border-line px-4 py-3.5">
+              {editing ? (
+                <span className="flex-1" />
+              ) : (
+                <div
+                  role="tablist"
+                  aria-label="Member sections"
+                  onKeyDown={onTabKeyDown}
+                  className="mr-auto flex shrink-0 gap-1 rounded-xl bg-canvas p-1.5 shadow-well"
+                >
+                  <TabButton
+                    id={detailsTabId}
+                    controls={detailsPanelId}
+                    selected={activeTab === 'details'}
+                    onSelect={() => {
+                      if (!busy) setActiveTab('details')
+                    }}
+                  >
+                    Details
+                  </TabButton>
+                  <TabButton
+                    id={permissionsTabId}
+                    controls={permissionsPanelId}
+                    selected={activeTab === 'permissions'}
+                    onSelect={() => {
+                      if (!busy) setActiveTab('permissions')
+                    }}
+                  >
+                    Permissions
+                  </TabButton>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={close}
                 aria-label="Close"
-                className="-mt-1 -mr-2 grid size-9 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-surface-hover hover:text-ink"
+                className="grid size-9 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-surface-hover hover:text-ink"
               >
                 <X size={18} strokeWidth={1.9} />
               </button>
@@ -142,8 +183,14 @@ export function UserDetailsDrawer({ member, onClose, roles, isSelf }: UserDetail
                   setEditing(false)
                 }}
               />
-            ) : (
-              <>
+            ) : activeTab === 'details' ? (
+              <div
+                id={detailsPanelId}
+                role="tabpanel"
+                aria-labelledby={detailsTabId}
+                tabIndex={0}
+                className="flex min-h-0 flex-1 flex-col"
+              >
                 <div className="flex-1 overflow-y-auto bg-canvas px-4 py-4">
                   {error && (
                     <div className="mb-3">
@@ -174,7 +221,6 @@ export function UserDetailsDrawer({ member, onClose, roles, isSelf }: UserDetail
                       <span className="tabular-nums">{dateFormat.format(new Date(member.createdAt))}</span>
                     </Detail>
                   </Panel>
-                  <MemberAccessPanel key={member.id} member={member} />
                 </div>
 
                 {/* Deactivate far left; Edit then Delete (icon only) on the right. */}
@@ -190,7 +236,15 @@ export function UserDetailsDrawer({ member, onClose, roles, isSelf }: UserDetail
                       {member.isActive ? 'Deactivate' : 'Activate'}
                     </Button>
                   )}
-                  <Button variant="primary" onClick={() => setEditing(true)} disabled={busy} className="ml-auto">
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setActiveTab('details')
+                      setEditing(true)
+                    }}
+                    disabled={busy}
+                    className="ml-auto"
+                  >
                     <Pencil size={15} strokeWidth={2} aria-hidden />
                     Edit
                   </Button>
@@ -207,7 +261,17 @@ export function UserDetailsDrawer({ member, onClose, roles, isSelf }: UserDetail
                     </Button>
                   )}
                 </div>
-              </>
+              </div>
+            ) : (
+              <div
+                id={permissionsPanelId}
+                role="tabpanel"
+                aria-labelledby={permissionsTabId}
+                tabIndex={0}
+                className="flex min-h-0 flex-1 flex-col"
+              >
+                <PermissionsPanel key={member.id} member={member} onBusyChange={setBusy} />
+              </div>
             )}
           </div>
         )}
@@ -254,6 +318,34 @@ function Panel({ title, className = '', children }: { title: string; className?:
   )
 }
 
+interface TabButtonProps {
+  id: string
+  controls: string
+  selected: boolean
+  onSelect: () => void
+  children: ReactNode
+}
+
+/** One stop in the recessed segmented control that switches the drawer view. */
+function TabButton({ id, controls, selected, onSelect, children }: TabButtonProps) {
+  return (
+    <button
+      type="button"
+      id={id}
+      role="tab"
+      aria-selected={selected}
+      aria-controls={controls}
+      tabIndex={selected ? 0 : -1}
+      onClick={onSelect}
+      className={`flex h-8 min-w-[6.5rem] items-center justify-center rounded-lg px-3 text-label transition-colors ${
+        selected ? 'btn btn-primary' : 'font-medium text-ink-2 hover:bg-surface-hover hover:text-ink'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
 /** One field: a Label-weight label in `--ink-2`, then the value at body size in `--ink`. */
 function Detail({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -271,11 +363,17 @@ function RoleTag({ role }: { role: MemberRole }) {
 }
 
 /**
- * The menus this person may open. Owners hold all of them implicitly; for
- * managers and staff each press of Save replaces the whole set, so removing a
- * tick removes the menu.
+ * The Permissions tab. Owners hold every menu implicitly; for managers and
+ * staff each press of Save replaces the whole set. Save is pinned in the
+ * footer, where the other drawer views keep their actions.
  */
-function MemberAccessPanel({ member }: { member: Member }) {
+function PermissionsPanel({
+  member,
+  onBusyChange,
+}: {
+  member: Member
+  onBusyChange: (busy: boolean) => void
+}) {
   const isOwner = member.role === 'owner'
   const { data, isPending, isError, refetch } = useQuery({
     ...memberAccessQuery(member.id),
@@ -284,47 +382,72 @@ function MemberAccessPanel({ member }: { member: Member }) {
 
   if (isOwner) {
     return (
-      <section className="mt-3 overflow-hidden rounded-xl bg-surface shadow-lift">
-        <h3 className="border-b border-line bg-canvas/50 px-3.5 py-2 text-caption font-semibold text-ink-2">
-          Menu access
-        </h3>
-        <p className="flex items-start gap-2.5 px-3.5 py-3 text-body text-ink-2">
-          <ShieldCheck size={16} strokeWidth={1.9} className="mt-0.5 shrink-0 text-secondary-text" aria-hidden />
-          Owners can open every menu. Grant menus to managers and staff from here.
-        </p>
-      </section>
+      <>
+        <div className="flex-1 overflow-y-auto bg-canvas px-4 py-4">
+          <section className="overflow-hidden rounded-xl bg-surface shadow-lift">
+            <p className="flex items-start gap-2.5 px-3.5 py-3 text-body text-ink-2">
+              <ShieldCheck size={16} strokeWidth={1.9} className="mt-0.5 shrink-0 text-secondary-text" aria-hidden />
+              Owners can open every menu. Grant menus to managers and staff from here.
+            </p>
+          </section>
+        </div>
+        <div className="border-t border-line bg-canvas/60 px-5 py-3.5">
+          <p className="text-caption text-ink-3">Owners have access to every menu.</p>
+        </div>
+      </>
     )
   }
 
-  return (
-    <section className="mt-3 overflow-hidden rounded-xl bg-surface shadow-lift">
-      <h3 className="border-b border-line bg-canvas/50 px-3.5 py-2 text-caption font-semibold text-ink-2">
-        Menu access
-      </h3>
-      {isPending ? (
-        <div className="grid place-items-center py-8">
-          <Loader label="Loading menu access" />
+  if (isPending) {
+    return (
+      <>
+        <div className="flex-1 overflow-y-auto bg-canvas px-4 py-4">
+          <div className="grid place-items-center rounded-xl bg-surface py-8 shadow-lift">
+            <Loader label="Loading menu access" />
+          </div>
         </div>
-      ) : isError || !data ? (
-        <div className="px-3.5 py-4">
-          <p className="text-body text-ink-2">Couldn’t load their menu access.</p>
-          <Button size="sm" variant="secondary" className="mt-2" onClick={() => void refetch()}>
-            Try again
-          </Button>
+        <div className="border-t border-line bg-canvas/60 px-5 py-3.5">
+          <p className="text-caption text-ink-3">Loading menu access…</p>
         </div>
-      ) : (
-        <MemberAccessEditor member={member} data={data} />
-      )}
-    </section>
-  )
+      </>
+    )
+  }
+
+  if (isError || !data) {
+    return (
+      <>
+        <div className="flex-1 overflow-y-auto bg-canvas px-4 py-4">
+          <div className="rounded-xl bg-surface px-3.5 py-4 shadow-lift">
+            <p className="text-body text-ink-2">Couldn’t load their menu access.</p>
+            <Button size="sm" variant="secondary" className="mt-2" onClick={() => void refetch()}>
+              Try again
+            </Button>
+          </div>
+        </div>
+        <div className="border-t border-line bg-canvas/60 px-5 py-3.5">
+          <p className="text-caption text-ink-3">Menu access unavailable</p>
+        </div>
+      </>
+    )
+  }
+
+  return <AccessEditor member={member} data={data} onBusyChange={onBusyChange} />
 }
 
 /**
- * The editable checklist, mounted once the server list has loaded. Its
- * baseline is what the server last confirmed, so Save enables only for a real
- * change and "Saved" survives until the next tick changes.
+ * The checklist and its Save action share one baseline: what the server last
+ * confirmed. Save enables only for a real change and "Saved" survives until
+ * the next tick changes.
  */
-function MemberAccessEditor({ member, data }: { member: Member; data: MemberAccess }) {
+function AccessEditor({
+  member,
+  data,
+  onBusyChange,
+}: {
+  member: Member
+  data: MemberAccess
+  onBusyChange: (busy: boolean) => void
+}) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(data.accessKeys))
   const [baseline, setBaseline] = useState(() => data.accessKeys.join('|'))
   const [saving, setSaving] = useState(false)
@@ -346,6 +469,7 @@ function MemberAccessEditor({ member, data }: { member: Member; data: MemberAcce
 
   async function save() {
     setSaving(true)
+    onBusyChange(true)
     setError(null)
     setSaved(false)
     try {
@@ -357,33 +481,38 @@ function MemberAccessEditor({ member, data }: { member: Member; data: MemberAcce
       setError(failure(e, 'Couldn’t save menu access. Try again.'))
     } finally {
       setSaving(false)
+      onBusyChange(false)
     }
   }
 
   return (
     <>
-      {error && (
-        <div className="px-3.5 pt-3">
-          <FormError message={error} />
-        </div>
-      )}
-      <ul className="divide-y divide-line">
-        {data.items.map((item) => (
-          <li key={item.key}>
-            <label className="flex cursor-pointer items-center gap-3 px-3.5 py-2.5 hover:bg-surface-hover">
-              <input
-                type="checkbox"
-                className="size-4 shrink-0 accent-secondary"
-                checked={selected.has(item.key)}
-                onChange={() => toggle(item.key)}
-                disabled={saving}
-              />
-              <span className="text-body text-ink">{item.label}</span>
-            </label>
-          </li>
-        ))}
-      </ul>
-      <div className="flex items-center gap-2 border-t border-line bg-canvas/50 px-3.5 py-2.5">
+      <div className="flex-1 overflow-y-auto bg-canvas px-4 py-4">
+        {error && (
+          <div className="mb-3">
+            <FormError message={error} />
+          </div>
+        )}
+        <section className="overflow-hidden rounded-xl bg-surface shadow-lift">
+          <ul className="divide-y divide-line">
+            {data.items.map((item) => (
+              <li key={item.key}>
+                <label className="flex cursor-pointer items-center gap-3 px-3.5 py-2.5 hover:bg-surface-hover">
+                  <input
+                    type="checkbox"
+                    className="size-4 shrink-0 accent-secondary"
+                    checked={selected.has(item.key)}
+                    onChange={() => toggle(item.key)}
+                    disabled={saving}
+                  />
+                  <span className="text-body text-ink">{item.label}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
+      <div className="flex items-center gap-2 border-t border-line bg-canvas/60 px-5 py-3.5">
         <p className="text-caption text-ink-3" aria-live="polite">
           {selected.size} of {data.items.length} menus{saved && !dirty ? ' · Saved' : ''}
         </p>

@@ -16,17 +16,17 @@
 :root {
   color-scheme: light;
 
-  /* Swiss paper: warm off-white surfaces on a light stone ground, warm inks. */
-  --canvas: #f3f0e8;
-  --surface: #fbf9f4;
-  --surface-hover: #ede9df;
+  /* Swiss paper: ricotta cream ground, warm off-white surfaces, warm inks. */
+  --canvas: #f5efd6;
+  --surface: #fbf8ea;
+  --surface-hover: #efe8cd;
 
   --ink: #1b1915;
   --ink-2: #4b4740;
   --ink-3: #6b665c;
 
-  --line: #e3ded2;
-  --line-strong: #d0c9ba;
+  --line: #e6dfc4;
+  --line-strong: #d6cdae;
 
   --primary: #017c5f; /* ink green: the main action colour in both themes */
   --on-primary: #ffffff;
@@ -42,7 +42,7 @@
 
   --focus: #017c5f;
   --loader-color: var(--secondary);
-  --grid-dot: #dcd6c8;
+  --grid-dot: #e2dab9;
   --scrim: rgb(43 36 24 / 0.32);
   --scrim-blur: 6px; /* blurs the page behind dialogs, modals and drawers */
 
@@ -60,7 +60,7 @@
   --btn-primary-bg: linear-gradient(180deg, #03936f 0%, #017c5f 100%);
   --btn-primary-shadow: 0 0 0 1px #016a51, inset 0 1px 0 rgb(255 255 255 / 0.2),
     0 1px 2px rgb(43 36 24 / 0.24), 0 2px 6px -2px rgb(43 36 24 / 0.2);
-  --btn-secondary-bg: linear-gradient(180deg, #fdfbf7 0%, #f2eee5 100%);
+  --btn-secondary-bg: linear-gradient(180deg, #fdfbf0 0%, #f3ecd4 100%);
   --btn-secondary-shadow: 0 0 0 1px rgb(43 36 24 / 0.13), inset 0 -1px 0 rgb(43 36 24 / 0.05),
     0 1px 2px rgb(43 36 24 / 0.07);
   --btn-danger-bg: linear-gradient(180deg, #d63e2a 0%, #b82d1b 100%);
@@ -75,16 +75,16 @@
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --canvas: #0c0d0e;
-  --surface: #141517;
-  --surface-hover: #1c1d20;
+  --canvas: #27292b;
+  --surface: #313437;
+  --surface-hover: #3b3e42;
 
   --ink: #f4f4f5;
   --ink-2: #b9bac1;
   --ink-3: #8e8f98;
 
-  --line: #26272b;
-  --line-strong: #35363b;
+  --line: #42464a;
+  --line-strong: #50555a;
 
   --primary: #017c5f;
   --on-primary: #ffffff;
@@ -100,7 +100,7 @@
 
   --focus: #3fbf94;
   --loader-color: var(--secondary-text);
-  --grid-dot: #1d1e21;
+  --grid-dot: #33373a;
   --scrim: rgb(0 0 0 / 0.6);
 
   --shadow-lift: 0 0 0 1px rgb(255 255 255 / 0.07);
@@ -111,7 +111,7 @@
   --btn-primary-bg: linear-gradient(180deg, #03936f 0%, #017c5f 100%);
   --btn-primary-shadow: 0 0 0 1px rgb(63 191 148 / 0.35), inset 0 1px 0 rgb(255 255 255 / 0.18),
     0 1px 2px rgb(0 0 0 / 0.5);
-  --btn-secondary-bg: linear-gradient(180deg, #25262a 0%, #1b1c1f 100%);
+  --btn-secondary-bg: linear-gradient(180deg, #3a3e42 0%, #303437 100%);
   --btn-secondary-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.07),
     0 1px 2px rgb(0 0 0 / 0.55);
   --btn-danger-bg: linear-gradient(180deg, #d63e2a 0%, #b82d1b 100%);

@@ -235,6 +235,7 @@ export function UsersPage() {
       <AddUserDialog open={adding} onOpenChange={setAdding} roles={roles} />
       <SearchUsersDialog open={searching} onOpenChange={setSearching} onSelect={viewUser} />
       <UserDetailsDrawer
+        key={viewing?.id ?? 'closed'}
         member={viewing}
         onClose={() => setPicked(null)}
         roles={roles}

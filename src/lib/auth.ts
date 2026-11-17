@@ -50,7 +50,8 @@ export const sessionQuery = queryOptions({
       throw error
     }
   },
-  staleTime: 60_000,
+  staleTime: 0,
+  refetchOnWindowFocus: true,
 })
 
 /** The session inside signed-in routes (the route guard guarantees it). */
