@@ -6,24 +6,24 @@ colors:
   ink-green-lit: "#03936f"
   ink-green-deep: "#016a51"
   ink-green-wash: "#e9f2eb"
-  ricotta-cream: "#f5efd6"
-  paper: "#fbf8ea"
-  paper-hover: "#efe8cd"
+  stone-ground: "#f3f0e8"
+  paper: "#fbf9f4"
+  paper-hover: "#ede9df"
   ink: "#1b1915"
   ink-2: "#4b4740"
   ink-3: "#6b665c"
-  hairline: "#e6dfc4"
-  hairline-strong: "#d6cdae"
+  hairline: "#e3ded2"
+  hairline-strong: "#d0c9ba"
   danger: "#c4321f"
   danger-wash: "#f9e9e3"
-  graphite-ink: "#27292b"
-  night-paper: "#313437"
-  night-paper-hover: "#3b3e42"
+  night-ground: "#0c0d0e"
+  night-paper: "#141517"
+  night-paper-hover: "#1c1d20"
   night-ink: "#f4f4f5"
   night-ink-2: "#b9bac1"
   night-ink-3: "#8e8f98"
-  night-hairline: "#42464a"
-  night-hairline-strong: "#50555a"
+  night-hairline: "#26272b"
+  night-hairline-strong: "#35363b"
   night-ink-green: "#3fbf94"
   night-ink-green-wash: "#0f2a22"
 typography:
@@ -146,14 +146,14 @@ components:
 
 **Creative North Star: "The Paper Desk"**
 
-Infynix OS should feel like a well-kept desk in a quiet office: a ricotta cream ground, paper-white panels laid on top, dark ink for everything that matters, and one green mark that says "this is live." The palette is deliberately warm rather than clinical, and the single accent is deliberately rare. This is a tool for running a company, not a brand surface; familiarity, density and calm outrank expression.
+Infynix OS should feel like a well-kept desk in a quiet office: a warm stone ground, paper-white panels laid on top, dark ink for everything that matters, and one green mark that says "this is live." The palette is deliberately warm rather than clinical, and the single accent is deliberately rare. This is a tool for running a company, not a brand surface; familiarity, density and calm outrank expression.
 
 The system is Swiss in its structure and paper in its material. A 4px grid, hairlines instead of boxes, and a compact Figtree scale carry the page. Depth is a warm, short shadow under a sheet of paper, never a grey glow. Every screen uses the same control vocabulary, the same focus ring and the same green for the current thing, so a manager can move from invoices to users without relearning the interface.
 
 `src/styles/tokens.css` is the normative source of values; this document explains how to use them. If the two disagree, the tokens file wins.
 
 **Key Characteristics:**
-- Ricotta cream and paper neutrals in light; graphite ink paper in dark.
+- Warm stone and paper neutrals in light; near-black paper in dark.
 - One accent: ink green (#017c5f), used for action, selection and state, never decoration.
 - Hairline structure: 1px warm borders and rings instead of heavy containers.
 - Compact working type: weight first, size second, 11–34px only.
@@ -170,26 +170,26 @@ A warm neutral field with one green signal; both themes are first-class.
 - **Ink Green Lifted for Text** (#3fbf94): the dark-theme replacement for green text, where #017c5f would not reach contrast.
 
 ### Neutral
-- **Ricotta Cream** (#f5efd6): the app canvas behind panels, drawers and dialogs.
-- **Paper** (#fbf8ea): panels, fields, tables and the sidebar. The brightest surface in light mode.
-- **Paper Hover** (#efe8cd): row and control hover in light mode.
+- **Stone Ground** (#f3f0e8): the app canvas behind panels, drawers and dialogs.
+- **Paper** (#fbf9f4): panels, fields, tables and the sidebar. The brightest surface in light mode.
+- **Paper Hover** (#ede9df): row and control hover in light mode.
 - **Ink** (#1b1915): primary text.
 - **Ink 2** (#4b4740): secondary text, labels, navigation at rest.
 - **Ink 3** (#6b665c): metadata, placeholders, de-emphasised text.
-- **Hairline** (#e6dfc4): dividers inside panels.
-- **Strong Hairline** (#d6cdae): panel edges and field rings.
+- **Hairline** (#e3ded2): dividers inside panels.
+- **Strong Hairline** (#d0c9ba): panel edges and field rings.
 - **Danger** (#c4321f): destructive actions and errors; **Danger Wash** (#f9e9e3) is its banner background.
 
 ### Dark theme
-- **Graphite Ink** (#27292b) and **Night Paper** (#313437) replace the cream and paper roles; **Night Paper Hover** (#3b3e42) replaces hover.
+- **Night Ground** (#0c0d0e) and **Night Paper** (#141517) replace the stone and paper roles; **Night Paper Hover** (#1c1d20) replaces hover.
 - **Night Ink** (#f4f4f5), **Night Ink 2** (#b9bac1), **Night Ink 3** (#8e8f98).
-- **Night Hairline** (#42464a) and **Night Hairline Strong** (#50555a).
+- **Night Hairline** (#26272b) and **Night Hairline Strong** (#35363b).
 - **Night Ink Green** (#3fbf94) for green text; **Night Ink Green Wash** (#0f2a22) for selected fills.
 
 ### Named Rules
 **The One Green Rule.** Ink green covers at most a tenth of any screen. It marks the primary action, the current navigation item, a role chip, a link or a focus ring — nothing else. If a decoration wants green, it gets ink or a hairline instead.
 
-**The Warm Paper Rule.** Light surfaces are ricotta cream and warm off-white; dark surfaces are graphite ink. Pure `#fff`, pure `#000` and cool grey shadows are outside the system.
+**The Warm Paper Rule.** Light surfaces are warm off-white; dark surfaces are warm near-black. Pure `#fff`, pure `#000` and cool grey shadows are outside the system.
 
 **The Named State Rule.** Green means live or selected; red means destructive or failed; ink-3 means unavailable. Never use colour without a state meaning.
 
@@ -256,7 +256,7 @@ Circular shapes are reserved for status dots; avatars are 6px squares with initi
 ### Buttons
 - **Shape:** 8px radius; 32/36/40px heights for small, default and large; 12–14px horizontal padding.
 - **Primary:** ink-green gradient from #03936f to #017c5f, white text, deep ring and a 1–2px drop. One per view where possible.
-- **Secondary:** paper gradient from #fdfbf0 to #f3ecd4, ink text, warm ring. The default for Cancel, View and toolbar actions.
+- **Secondary:** paper gradient from #fdfbf7 to #f2eee5, ink text, warm ring. The default for Cancel, View and toolbar actions.
 - **Danger:** red gradient, white text; used only for sign-out, deactivate, delete and their confirmations.
 - **Hover / Focus:** hover raises brightness slightly; press translates 0.5px and flattens to the pressed inset; focus is the global 2px ink-green ring at 2px offset. Disabled is 60% opacity with a not-allowed cursor.
 
