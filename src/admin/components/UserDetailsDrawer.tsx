@@ -282,6 +282,7 @@ export function UserDetailsDrawer({ member, onClose, roles, isSelf }: UserDetail
         onOpenChange={setConfirmDelete}
         tone="danger"
         icon={null}
+        width="compact"
         title={`Delete ${member?.fullName ?? 'this user'}?`}
         description="Their account is deleted and they’re signed out. This can’t be undone. To keep their account, deactivate it instead."
         confirmLabel="Delete"

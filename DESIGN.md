@@ -291,6 +291,7 @@ Circular shapes are reserved for status dots and the header theme toggle; avatar
 ### Drawers & Dialogs
 - **Drawer:** 440px wide sheet from the right, paper, Dialog shadow, header with a recessed tab control and Close at the right, then a scrollable canvas body and a pinned footer. The Details tab pins Deactivate/Edit/Delete there; the Permissions tab swaps them for its Save access action. Destructive actions sit left; primary on the right.
 - **Dialog:** 420px default width, 12px radius, Dialog shadow, title 16px/600, description body-lg ink-2, actions right-aligned. Use `<dialog>` and native focus behaviour.
+- **Alert dialog:** destructive confirmations (sign out, delete user, delete client) use the compact width by default: 24px side gutters, a 20rem cap and a 14px/600 title on phones, widening to the standard dialog at `sm`. Every confirmation shares this so none look oversized on mobile.
 
 ### Empty state
 - **Shape:** one 40px paper icon tile with Lift, a 16px/600 heading 16px below, and one body sentence in ink-2. Centred, max 24rem wide, no card around it.

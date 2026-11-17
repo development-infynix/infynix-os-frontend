@@ -58,10 +58,10 @@ export function UsersPage() {
   const roles = assignableRoles(user.role)
 
   return (
-    <div className="flex w-full flex-col px-5 pt-8 pb-32 sm:min-h-0 sm:flex-1 sm:px-10 sm:py-10">
+    <div className="flex w-full flex-col px-5 pb-32 sm:min-h-0 sm:flex-1 sm:px-10 sm:py-10">
       {/* No visible page title (the header says System Management); kept for screen readers. */}
       <h1 className="sr-only">Users</h1>
-      <div className="flex justify-end gap-2">
+      <div className="sticky top-header z-20 -mx-5 flex h-header items-center justify-end gap-2 border-b border-line bg-canvas/90 px-5 backdrop-blur-sm sm:static sm:mx-0 sm:h-auto sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
         <Button
           variant="secondary"
           onClick={() => setSearching(true)}
@@ -107,7 +107,7 @@ export function UsersPage() {
           <>
             <ul
               aria-busy={busy}
-              className="flex flex-col gap-3 sm:hidden"
+              className="max-h-[calc(100dvh-11rem)] flex flex-col gap-3 overflow-y-auto overscroll-contain pb-20 sm:hidden sm:max-h-none sm:overflow-visible sm:pb-0"
             >
               {data.items.map((m) => {
                 const isSelf = m.id === user.id
