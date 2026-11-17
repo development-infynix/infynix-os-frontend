@@ -19,6 +19,7 @@ const TITLES: Record<string, string> = {
 export function AppLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const [menuOpen, setMenuOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
     if (!menuOpen) return
@@ -32,9 +33,14 @@ export function AppLayout() {
   }, [menuOpen])
 
   return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[var(--spacing-sidebar)_1fr]">
-      <aside className="sticky top-0 hidden h-dvh border-r border-line-strong lg:block">
-        <Sidebar />
+    <div
+      className={`min-h-dvh lg:grid lg:transition-[grid-template-columns] lg:duration-200 lg:ease-out ${sidebarCollapsed ? 'lg:grid-cols-[64px_1fr]' : 'lg:grid-cols-[var(--spacing-sidebar)_1fr]'}`}
+    >
+      <aside className="sticky top-0 hidden h-dvh overflow-hidden border-r border-line-strong lg:block">
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed((current) => !current)}
+        />
       </aside>
 
       {/* Mobile drawer */}

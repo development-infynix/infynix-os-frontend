@@ -1,4 +1,5 @@
 @import '@fontsource-variable/figtree';
+@import '@fontsource-variable/caveat';
 @import 'tailwindcss';
 /* Every design value lives in tokens.css. Nothing below defines a raw value. */
 @import './styles/tokens.css';

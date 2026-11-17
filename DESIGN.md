@@ -198,6 +198,7 @@ A warm neutral field with one green signal; both themes are first-class.
 **Display Font:** Figtree Variable (with ui-sans-serif, system-ui, sans-serif)
 **Body Font:** the same family
 **Label Font:** the same family
+**Accent Font:** Caveat Variable (handwriting; only the OS in the sidebar wordmark)
 
 **Character:** One compact working sans, chosen for density and calm. Weight carries rank before size does, so a 16px title at 600 can sit above 14px body without a jump in scale.
 
@@ -217,11 +218,11 @@ A warm neutral field with one green signal; both themes are first-class.
 
 **The Tabular Rule.** Dates, counts, page numbers, last sign-in and any column that compares figures use `tabular-nums`. Prose never does.
 
-**The Sentence-Case Rule.** Buttons, labels and menu items are sentence case ("Add user", "Save changes", "Payments & Budget"). No title case, no all-caps except a semantic tag already defined as micro.
+**The Sentence-Case Rule.** Buttons, labels and menu items are sentence case ("Add user", "Save changes", "Payments & Budget"). No title case, no all-caps except a semantic tag already defined as micro and the INFYNIX wordmark.
 
 ## Layout
 
-A fixed working shell: a 248px sidebar on the left at `lg`, a 52px header across the top, and content that scrolls inside `<main>` while the shell stays put. Content takes 20px side padding on phones and 40px from `sm` up; reading surfaces stop at 64rem (`max-w-5xl`), while tables and panels fill the available width.
+A fixed working shell: a 248px sidebar on the left at `lg` (collapsible to a 64px icon rail from its header), a 52px header across the top, and content that scrolls inside `<main>` while the shell stays put. Content takes 20px side padding on phones and 40px from `sm` up; reading surfaces stop at 64rem (`max-w-5xl`), while tables and panels fill the available width.
 
 The spacing rhythm is a 4px base with 8, 12, 16, 20, 24 and 40 as the working steps. Related controls sit 8–12px apart; a new group starts at 16–24px; a new section starts at 24–40px. More space goes above a heading than below it. Navigation rows are 32px tall, buttons 36px, inputs 40px, page actions 32px when compact.
 
@@ -280,7 +281,7 @@ Circular shapes are reserved for status dots; avatars are 6px squares with initi
 - **Sidebar:** paper, 248px, 32px rows with 6px radius, 16px icons at 1.9 stroke, 14px/500 ink-2. Hover moves to paper-hover and ink; the selected row uses the primary button treatment (gradient, bevel, on-primary text). The list starts 16px below the header hairline, rows carry 4px vertical padding around a 1px hairline between destinations.
 - **Sections:** a 12px caption label in ink-3, 20px above the list.
 - **Footer utility:** owner-only destinations (System) pin above the account block in the sidebar footer. They keep the normal 32px row and no section caption, separated from the account block by a full-bleed hairline.
-- **Header:** 52px, paper, hairline bottom running across the content and the sidebar; the page title is 16px/600 ink, not a second heading. The sidebar header holds the Infynix wordmark with the company name beneath it.
+- **Header:** 52px, paper, hairline bottom running across the content and the sidebar; the page title is 16px/600 ink, not a second heading. The sidebar header holds the INFYNIX wordmark with “OS” set in the Caveat handwriting accent.
 - **Mobile:** the sidebar becomes a 280px drawer with a scrim and a close button; no off-canvas hover states.
 
 ### Drawers & Dialogs

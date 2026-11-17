@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useState } from 'react'
+import { BsLayoutSidebarReverse } from 'react-icons/bs'
 import { AlertDialog } from '@/components/Alert'
 import { Button } from '@/components/Button'
 import { hasAccess } from '@/lib/access'
@@ -61,11 +62,14 @@ const ADMIN_NAV: NavItem[] = [{ to: '/admin/users', label: 'System', icon: Users
 interface SidebarProps {
   /** Mobile drawer only: closes it. */
   onClose?: () => void
+  /** Desktop only: narrows the sidebar to an icon rail. */
+  collapsed?: boolean
+  onToggleCollapse?: () => void
 }
 
-export function Sidebar({ onClose }: SidebarProps) {
+export function Sidebar({ onClose, collapsed = false, onToggleCollapse }: SidebarProps) {
   const session = useSession()
-  const { user, tenant } = session
+  const { user } = session
   const isAdmin = canAdminister(user.role)
   const nav = MAIN_NAV.filter((item) => !item.access || hasAccess(session, item.access))
   const queryClient = useQueryClient()
@@ -83,22 +87,20 @@ export function Sidebar({ onClose }: SidebarProps) {
 
   return (
     <div className="flex h-full flex-col bg-canvas">
-      <div className="flex h-header items-center gap-2 border-b border-line px-2.5">
-        <div className="flex min-w-0 flex-1 items-center gap-2.5 px-1.5">
-          <span
-            aria-hidden
-            className="grid size-7 shrink-0 place-items-center rounded-md bg-secondary text-caption font-semibold text-on-secondary"
-          >
-            I
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-body font-semibold leading-5 text-ink">Infynix</p>
-            <p className="truncate text-caption leading-4 text-ink-3" title={tenant.name}>
-              {tenant.name}
+      <div
+        className={`flex h-header items-center border-b border-line ${collapsed ? 'justify-center px-2' : 'gap-2 px-2.5'}`}
+      >
+        {!collapsed && (
+          <div className="flex min-w-0 flex-1 items-center px-1.5">
+            <p className="flex min-w-0 items-baseline gap-1.5">
+              <span className="truncate text-[20px] font-semibold uppercase leading-none tracking-[0.04em] text-ink">
+                Infynix
+              </span>
+              <span className="font-hand text-[20px] leading-none text-secondary-text">OS</span>
             </p>
           </div>
-        </div>
-        {onClose && (
+        )}
+        {onClose ? (
           <button
             type="button"
             onClick={onClose}
@@ -107,38 +109,61 @@ export function Sidebar({ onClose }: SidebarProps) {
           >
             <X size={18} strokeWidth={1.75} />
           </button>
+        ) : (
+          onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className="grid size-8 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-surface-hover hover:text-ink"
+            >
+              <BsLayoutSidebarReverse size={17} />
+            </button>
+          )
         )}
       </div>
 
-      <nav aria-label="Main" className="flex-1 overflow-y-auto px-2.5 pt-4">
-        <NavList items={nav} onNavigate={onClose} />
+      <nav
+        aria-label="Main"
+        className={`flex-1 overflow-y-auto pt-4 ${collapsed ? 'px-2' : 'px-2.5'}`}
+      >
+        <NavList items={nav} onNavigate={onClose} collapsed={collapsed} />
       </nav>
 
       <div className="border-t border-line">
         {isAdmin && (
-          <nav aria-label="Admin" className="border-b border-line px-2.5 py-2">
-            <NavList items={ADMIN_NAV} onNavigate={onClose} />
+          <nav
+            aria-label="Admin"
+            className={`border-b border-line py-2 ${collapsed ? 'px-2' : 'px-2.5'}`}
+          >
+            <NavList items={ADMIN_NAV} onNavigate={onClose} collapsed={collapsed} />
           </nav>
         )}
-        <div className="p-2.5">
-          <div className="flex items-center gap-2.5 rounded-lg p-2">
+        <div className={collapsed ? 'p-2' : 'p-2.5'}>
+          <div
+            className={`flex items-center gap-2.5 rounded-lg p-2 ${collapsed ? 'justify-center px-0' : ''}`}
+          >
             <span
               aria-hidden
+              title={collapsed ? `${user.fullName} (${ROLE_LABEL[user.role]})` : undefined}
               className="grid size-8 shrink-0 place-items-center rounded-md bg-secondary text-caption font-semibold text-on-secondary"
             >
               {initials(user.fullName)}
             </span>
-            <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-2 text-body font-semibold leading-5 text-ink">
-                <span className="truncate">{user.fullName}</span>
-                <span className="shrink-0 rounded-md bg-secondary-soft px-1.5 py-px text-micro font-semibold leading-4 text-secondary-text">
-                  {ROLE_LABEL[user.role]}
-                </span>
-              </p>
-              <p className="truncate text-caption leading-4 text-ink-3" title={user.email}>
-                {user.email}
-              </p>
-            </div>
+            {!collapsed && (
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-2 text-body font-semibold leading-5 text-ink">
+                  <span className="truncate">{user.fullName}</span>
+                  <span className="shrink-0 rounded-md bg-secondary-soft px-1.5 py-px text-micro font-semibold leading-4 text-secondary-text">
+                    {ROLE_LABEL[user.role]}
+                  </span>
+                </p>
+                <p className="truncate text-caption leading-4 text-ink-3" title={user.email}>
+                  {user.email}
+                </p>
+              </div>
+            )}
           </div>
           {/* Signing out is red here and in its confirmation, so the two always match. */}
           <Button
@@ -146,10 +171,11 @@ export function Sidebar({ onClose }: SidebarProps) {
             size="sm"
             onClick={() => setConfirmSignOut(true)}
             aria-haspopup="dialog"
-            className="mt-3 w-full"
+            title={collapsed ? 'Sign out' : undefined}
+            className={`mt-3 w-full ${collapsed ? 'px-0' : ''}`}
           >
             <LogOut size={15} strokeWidth={2} aria-hidden />
-            Sign out
+            <span className={collapsed ? 'sr-only' : undefined}>Sign out</span>
           </Button>
         </div>
       </div>
@@ -175,7 +201,15 @@ export function Sidebar({ onClose }: SidebarProps) {
   )
 }
 
-function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
+function NavList({
+  items,
+  onNavigate,
+  collapsed = false,
+}: {
+  items: NavItem[]
+  onNavigate?: () => void
+  collapsed?: boolean
+}) {
   return (
     <ul className="flex flex-col divide-y divide-line">
       {items.map(({ to, label, icon: Icon }) => (
@@ -184,10 +218,11 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
             to={to}
             onClick={onNavigate}
             activeOptions={{ exact: to === '/' }}
-            className="group flex h-8 items-center gap-2.5 rounded-md px-2 text-body font-medium text-ink-2 transition duration-100 hover:bg-surface-hover hover:text-ink data-[status=active]:[background:var(--btn-primary-bg)] data-[status=active]:[box-shadow:var(--btn-primary-shadow)] data-[status=active]:text-on-primary data-[status=active]:hover:brightness-[1.06] data-[status=active]:hover:text-on-primary"
+            title={collapsed ? label : undefined}
+            className={`group flex h-8 items-center rounded-md text-body font-medium text-ink-2 transition duration-100 hover:bg-surface-hover hover:text-ink data-[status=active]:[background:var(--btn-primary-bg)] data-[status=active]:[box-shadow:var(--btn-primary-shadow)] data-[status=active]:text-on-primary data-[status=active]:hover:brightness-[1.06] data-[status=active]:hover:text-on-primary ${collapsed ? 'justify-center px-0' : 'gap-2.5 px-2'}`}
           >
             <Icon size={16} strokeWidth={1.9} className="shrink-0" />
-            {label}
+            <span className={collapsed ? 'sr-only' : undefined}>{label}</span>
           </Link>
         </li>
       ))}

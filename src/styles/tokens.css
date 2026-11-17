@@ -123,8 +123,10 @@
 
 /* ── Tailwind utilities generated from the tokens ───────────────────────── */
 @theme inline {
-  /* Type: Figtree, a compact working scale (rank by weight first, size second). */
+  /* Type: Figtree, a compact working scale (rank by weight first, size second).
+     Caveat is the handwriting accent, used only for the OS in the wordmark. */
   --font-sans: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-hand: 'Caveat Variable', 'Segoe Script', cursive;
 
   --text-micro: 11px; /* role tags */
   --text-micro--line-height: 16px;
