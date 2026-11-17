@@ -1,12 +1,19 @@
 import { useQuery } from '@tanstack/react-query'
-import { Search, UserPlus } from 'lucide-react'
+import { Check, Filter, Search, UserPlus } from 'lucide-react'
 import { getRouteApi } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Loader } from '@/components/Loader'
 import { Pagination } from '@/components/Pagination'
 import { initials, ROLE_LABEL, useSession, type MemberRole } from '@/lib/auth'
-import { assignableRoles, canManage, memberQuery, membersPageQuery, type Member } from '@/lib/members'
+import {
+  assignableRoles,
+  canManage,
+  memberQuery,
+  membersPageQuery,
+  type Member,
+  type MemberFilter,
+} from '@/lib/members'
 import { AddUserDialog } from '../components/AddUserDialog'
 import { SearchUsersDialog } from '../components/SearchUsersDialog'
 import { UserDetailsDrawer } from '../components/UserDetailsDrawer'
@@ -21,16 +28,23 @@ const route = getRouteApi('/_authed/admin/users')
 export function UsersPage() {
   const { user } = useSession()
   const page = route.useSearch({ select: (s) => s.page ?? 1 })
+  const filter = route.useSearch({ select: (s) => s.filter ?? 'all' })
   const navigate = route.useNavigate()
-  const { data, isPending, isError, isPlaceholderData, refetch } = useQuery(membersPageQuery(page))
+  const { data, isPending, isFetching, isError, isPlaceholderData, refetch } = useQuery(
+    membersPageQuery(page, filter),
+  )
+  const busy = isFetching && isPlaceholderData
 
-  const goTo = (next: number) => void navigate({ search: { page: next } })
+  const goTo = (next: number) => void navigate({ search: { page: next, filter } })
+  const changeFilter = (next: MemberFilter) => void navigate({ search: { page: 1, filter: next } })
 
   // A page that no longer exists (the last user on it was deleted, or an old
   // link): go to the last page that does.
   useEffect(() => {
-    if (data && page > data.totalPages) void navigate({ search: { page: data.totalPages }, replace: true })
-  }, [data, page, navigate])
+    if (data && page > data.totalPages) {
+      void navigate({ search: { page: data.totalPages, filter }, replace: true })
+    }
+  }, [data, page, filter, navigate])
   const [adding, setAdding] = useState(false)
   const [searching, setSearching] = useState(false)
   // The user in the details drawer: opened from a row or from search (they may
@@ -58,6 +72,7 @@ export function UsersPage() {
         >
           <Search size={16} strokeWidth={2} className="shrink-0" aria-hidden />
         </Button>
+        <UserFilterMenu value={filter} onChange={changeFilter} />
         {/* Icon only on phones, icon + label from tablet up. */}
         <Button
           variant="primary"
@@ -75,7 +90,7 @@ export function UsersPage() {
       {/* Phones: one card per person. Tablet and up: one panel holding the table. */}
       {/* Tablet and up: the panel takes all the height left, so only the table scrolls. */}
       <div className="mt-4 flex min-h-[70vh] flex-col sm:min-h-72 sm:flex-1 sm:overflow-hidden sm:rounded-xl sm:bg-surface sm:shadow-lift">
-        {isPending ? (
+        {isPending || busy ? (
           <div className="grid flex-1 place-items-center">
             <Loader label="Loading users" />
           </div>
@@ -91,8 +106,8 @@ export function UsersPage() {
         ) : (
           <>
             <ul
-              aria-busy={isPlaceholderData}
-              className={`flex flex-col gap-3 transition-opacity sm:hidden ${isPlaceholderData ? 'opacity-60' : ''}`}
+              aria-busy={busy}
+              className="flex flex-col gap-3 sm:hidden"
             >
               {data.items.map((m) => {
                 const isSelf = m.id === user.id
@@ -133,10 +148,8 @@ export function UsersPage() {
 
             {/* Tablet and up: rows scroll inside the fixed-height panel; the header stays pinned. */}
             <div
-              aria-busy={isPlaceholderData}
-              className={`hidden min-h-0 flex-1 overflow-y-auto overscroll-contain transition-opacity sm:block ${
-                isPlaceholderData ? 'opacity-60' : ''
-              }`}
+              aria-busy={busy}
+              className="hidden min-h-0 flex-1 overflow-y-auto overscroll-contain sm:block"
             >
               <table className="w-full table-fixed text-left text-body">
                 <thead className="sticky top-0 z-10 bg-surface text-caption font-medium text-ink-3">
@@ -224,7 +237,7 @@ export function UsersPage() {
               total={data.total}
               pageSize={data.pageSize}
               onPageChange={goTo}
-              busy={isPlaceholderData}
+              busy={busy}
               noun={data.total === 1 ? 'user' : 'users'}
               className="fixed inset-x-0 bottom-0 z-20 border-t border-line-strong bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:static sm:z-auto sm:shrink-0 sm:bg-canvas/60 sm:py-2.5 sm:backdrop-blur-none"
             />
@@ -241,6 +254,90 @@ export function UsersPage() {
         roles={roles}
         isSelf={viewing?.id === user.id}
       />
+    </div>
+  )
+}
+
+const FILTER_OPTIONS: { value: MemberFilter; label: string }[] = [
+  { value: 'all', label: 'All users' },
+  { value: 'active', label: 'Active' },
+  { value: 'deactivated', label: 'Deactivated' },
+  { value: 'staff', label: 'Staff' },
+  { value: 'admin', label: 'Admin' },
+]
+
+/** A compact dropdown; each choice is applied by the server, not in the table. */
+function UserFilterMenu({
+  value,
+  onChange,
+}: {
+  value: MemberFilter
+  onChange: (next: MemberFilter) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <Button
+        variant="secondary"
+        onClick={() => setOpen((current) => !current)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Filter users"
+        className="w-9 px-0!"
+      >
+        <Filter size={16} strokeWidth={2} aria-hidden />
+      </Button>
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Filter users"
+          className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-lg bg-surface py-1 shadow-dialog"
+        >
+          {FILTER_OPTIONS.map(({ value: option, label }, index) => (
+            <li
+              key={option}
+              role="presentation"
+              className={index === 1 || index === 3 ? 'mt-1 border-t border-line pt-1' : ''}
+            >
+              <button
+                type="button"
+                role="option"
+                aria-selected={option === value}
+                onClick={() => {
+                  onChange(option)
+                  setOpen(false)
+                }}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-body ${
+                  option === value
+                    ? 'bg-secondary-soft font-medium text-secondary-text'
+                    : 'text-ink-2 hover:bg-surface-hover hover:text-ink'
+                }`}
+              >
+                <span className="flex-1">{label}</span>
+                {option === value && <Check size={14} strokeWidth={2} aria-hidden />}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

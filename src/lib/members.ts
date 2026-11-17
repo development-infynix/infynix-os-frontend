@@ -18,6 +18,10 @@ export const MEMBERS_PAGE_SIZE = 50
 /** Every page of the users list: invalidate this after any change. */
 export const MEMBERS_KEY = ['members'] as const
 
+/** Quick filters for the users list, kept in the URL and applied by the server. */
+export const MEMBER_FILTERS = ['all', 'active', 'deactivated', 'staff', 'admin'] as const
+export type MemberFilter = (typeof MEMBER_FILTERS)[number]
+
 export interface MembersPage {
   items: Member[]
   total: number
@@ -30,10 +34,15 @@ export interface MembersPage {
  * One page of the company's users, fetched from the server. While the next
  * page loads, the current one stays on screen instead of flashing empty.
  */
-export const membersPageQuery = (page: number) =>
+export const membersPageQuery = (page: number, filter: MemberFilter = 'all') =>
   queryOptions({
-    queryKey: [...MEMBERS_KEY, page],
-    queryFn: () => api<MembersPage>(`/members?page=${page}&pageSize=${MEMBERS_PAGE_SIZE}`),
+    queryKey: [...MEMBERS_KEY, 'page', page, filter],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(page), pageSize: String(MEMBERS_PAGE_SIZE) })
+      if (filter === 'active' || filter === 'deactivated') params.set('status', filter)
+      if (filter === 'staff' || filter === 'admin') params.set('role', filter)
+      return api<MembersPage>(`/members?${params.toString()}`)
+    },
     placeholderData: keepPreviousData,
   })
 

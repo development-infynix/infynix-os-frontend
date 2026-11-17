@@ -1,11 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { UsersPage } from '@/admin/pages/UsersPage'
-import { membersPageQuery } from '@/lib/members'
+import { MEMBER_FILTERS, membersPageQuery } from '@/lib/members'
 
-/** `?page=2` keeps the current page in the URL (back button, shared links); no page means 1. */
+/** Page and filter stay in the URL (back button, shared links); their defaults are 1 and all. */
 const searchSchema = z.object({
   page: z.coerce.number().int().min(1).optional().catch(undefined),
+  filter: z.enum(MEMBER_FILTERS).optional().catch('all'),
 })
 
 /**
@@ -14,9 +15,9 @@ const searchSchema = z.object({
  */
 export const Route = createFileRoute('/_authed/admin/users')({
   validateSearch: searchSchema,
-  loaderDeps: ({ search }) => ({ page: search.page ?? 1 }),
+  loaderDeps: ({ search }) => ({ page: search.page ?? 1, filter: search.filter ?? 'all' }),
   loader: ({ context, deps }) => {
-    void context.queryClient.prefetchQuery(membersPageQuery(deps.page))
+    void context.queryClient.prefetchQuery(membersPageQuery(deps.page, deps.filter))
   },
   component: UsersPage,
 })
