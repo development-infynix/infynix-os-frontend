@@ -108,6 +108,11 @@ export function UsersPage() {
                         </p>
                         <p className="truncate text-caption text-ink-3">{m.email}</p>
                       </div>
+                      {/* Phones: the role sits top right and the date leads the bottom bar. */}
+                      <RoleTag role={m.role} className="shrink-0" />
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-line pt-3 text-label text-ink-2">
+                      <span className="text-caption text-ink-3 tabular-nums">Created {createdOn(m.createdAt)}</span>
                       {viewable && (
                         <Button
                           size="sm"
@@ -115,16 +120,11 @@ export function UsersPage() {
                           onClick={() => viewUser(m)}
                           aria-haspopup="dialog"
                           aria-label={`View ${m.fullName}`}
+                          className="ml-auto"
                         >
                           View
                         </Button>
                       )}
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-line pt-3 text-label text-ink-2">
-                      <RoleTag role={m.role} />
-                      <span className="ml-auto text-caption text-ink-3 tabular-nums">
-                        Created {createdOn(m.createdAt)}
-                      </span>
                     </div>
                   </li>
                 )

@@ -25,6 +25,12 @@ export interface AlertDialogProps {
    * when it rejects the error is shown in the dialog. Omit it for a notice.
    */
   onConfirm?: () => void | Promise<void>
+  /**
+   * `compact` keeps a narrow, card-like dialog on phones for short
+   * confirmations; `default` fills the width up to the dialog size. Both are
+   * the same from `sm` up.
+   */
+  width?: 'default' | 'compact'
 }
 
 /**
@@ -55,6 +61,7 @@ export function AlertDialog({
   tone = 'default',
   icon,
   onConfirm,
+  width = 'default',
 }: AlertDialogProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
@@ -117,7 +124,11 @@ export function AlertDialog({
       }}
       // Keep Escape from also closing whatever is underneath (the mobile drawer).
       onKeyDown={(e) => e.key === 'Escape' && e.stopPropagation()}
-      className="app-dialog m-auto w-[calc(100%-32px)] max-w-dialog rounded-xl border-0 bg-surface p-0 text-ink shadow-dialog"
+      className={`app-dialog m-auto rounded-xl border-0 bg-surface p-0 text-ink shadow-dialog ${
+        width === 'compact'
+          ? 'w-[calc(100%-48px)] max-w-[20rem] sm:w-[calc(100%-32px)] sm:max-w-dialog'
+          : 'w-[calc(100%-32px)] max-w-dialog'
+      }`}
     >
       <div className="flex gap-3.5 p-5 pb-4">
         {shownIcon && (
@@ -131,11 +142,21 @@ export function AlertDialog({
           </span>
         )}
         <div className="min-w-0 pt-1">
-          <h2 id={titleId} className="text-title font-semibold leading-6 tracking-title">
+          <h2
+            id={titleId}
+            className={`font-semibold tracking-title ${
+              width === 'compact' ? 'text-body-lg leading-5 sm:text-title sm:leading-6' : 'text-title leading-6'
+            }`}
+          >
             {title}
           </h2>
           {description && (
-            <div id={descId} className="mt-1 text-body text-ink-2">
+            <div
+              id={descId}
+              className={`mt-1 break-words text-ink-2 ${
+                width === 'compact' ? 'text-label sm:text-body' : 'text-body'
+              }`}
+            >
               {description}
             </div>
           )}
@@ -147,7 +168,9 @@ export function AlertDialog({
         </div>
       </div>
 
-      <div className="flex flex-col-reverse gap-2 border-t border-line bg-canvas/60 px-5 py-3.5 sm:flex-row sm:justify-end">
+      {/* Actions on one row (Cancel left, the action right) at every width; on
+          phones they split the bar evenly instead of stacking. */}
+      <div className="flex items-center gap-2 border-t border-line bg-canvas/60 px-5 py-3.5 [&>*]:flex-1 sm:justify-end sm:[&>*]:flex-none">
         {cancelLabel !== null && (
           <Button ref={cancelRef} variant="secondary" onClick={dismiss} disabled={pending}>
             {cancelLabel}

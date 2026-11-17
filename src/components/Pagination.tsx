@@ -16,7 +16,8 @@ interface PaginationProps {
 
 /**
  * The footer of a server-paginated list: "Showing 51–100 of 230 users" on the
- * left; Previous, "Page 2 of 5" and Next on the right. Used by every table.
+ * left; Previous, the current page number and Next on the right. Used by every
+ * table.
  */
 export function Pagination({
   page,
@@ -52,9 +53,14 @@ export function Pagination({
           <ChevronLeft size={15} strokeWidth={2} aria-hidden />
           <span className="hidden sm:inline">Previous</span>
         </Button>
-        <span className="px-1 tabular-nums" aria-current="page">
-          Page <span className="font-medium text-ink">{page}</span> of{' '}
-          <span className="font-medium text-ink">{totalPages}</span>
+        {/* The current page as a button-sized chip, between Previous and Next. */}
+        <span
+          aria-current="page"
+          className="btn btn-secondary h-8 min-w-8 px-2.5 text-label text-ink tabular-nums hover:filter-none"
+        >
+          <span className="sr-only">Page </span>
+          {page}
+          <span className="sr-only"> of {totalPages}</span>
         </span>
         <Button
           size="sm"

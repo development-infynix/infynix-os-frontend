@@ -71,10 +71,14 @@ export function Modal({ open, onOpenChange, title, description, children, busy =
   )
 }
 
-/** The bottom bar of a Modal form: actions right-aligned, stacked on phones. */
+/**
+ * The bottom bar of a Modal form: actions on one row (Cancel left, the primary
+ * action right) at every width. On phones the buttons share the bar evenly so
+ * they stay easy to tap; from `sm` up they sit right-aligned at their own size.
+ */
 export function ModalFooter({ children }: { children: ReactNode }) {
   return (
-    <div className="mt-5 flex flex-col-reverse gap-2 border-t border-line bg-canvas/60 px-5 py-3.5 sm:flex-row sm:justify-end">
+    <div className="mt-5 flex items-center gap-2 border-t border-line bg-canvas/60 px-5 py-3.5 [&>*]:flex-1 sm:justify-end sm:[&>*]:flex-none">
       {children}
     </div>
   )

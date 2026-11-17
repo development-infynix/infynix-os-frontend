@@ -123,6 +123,7 @@ export function Sidebar({ onClose }: SidebarProps) {
         }
         tone="danger"
         icon={null}
+        width="compact"
         confirmLabel="Sign out"
         pendingLabel="Signing out…"
         onConfirm={handleSignOut}
