@@ -2,13 +2,13 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
   CalendarDays,
-  Contact,
   FolderKanban,
   Handshake,
   House,
   Images,
   LogOut,
   ReceiptText,
+  ShieldUser,
   Users,
   Wallet,
   X,
@@ -42,7 +42,7 @@ interface NavItem {
 
 const MAIN_NAV: NavItem[] = [
   { to: '/', label: 'Overview', icon: House },
-  { to: '/clients', label: 'Clients', icon: Contact, access: 'clients' },
+  { to: '/clients', label: 'Clients', icon: Users, access: 'clients' },
   { to: '/crm', label: 'CRM', icon: Handshake, access: 'crm' },
   { to: '/calendar', label: 'Calendar', icon: CalendarDays, access: 'calendar' },
   { to: '/payments-budget', label: 'Payments & Budget', icon: Wallet, access: 'payments-budget' },
@@ -57,7 +57,7 @@ const MAIN_NAV: NavItem[] = [
 ]
 
 /** The owner's utility destination, pinned above the account footer. */
-const ADMIN_NAV: NavItem[] = [{ to: '/admin/users', label: 'System', icon: Users }]
+const ADMIN_NAV: NavItem[] = [{ to: '/admin/users', label: 'System', icon: ShieldUser }]
 
 interface SidebarProps {
   /** Mobile drawer only: closes it. */
