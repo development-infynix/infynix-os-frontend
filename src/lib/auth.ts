@@ -25,10 +25,12 @@ export interface Tenant {
   createdAt: string
 }
 
-/** The signed-in person and their company. */
+/** The signed-in person, their company, and the menus they may use. */
 export interface Session {
   user: User
   tenant: Tenant
+  /** Menu keys granted to this person; owners hold every menu. */
+  access: string[]
 }
 
 export const ROLE_LABEL: Record<MemberRole, string> = {

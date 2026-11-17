@@ -1,9 +1,11 @@
-import { useQueryClient } from '@tanstack/react-query'
-import { Eye, EyeOff, Pencil, Trash2, UserCheck, UserX, X } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Eye, EyeOff, Pencil, ShieldCheck, Trash2, UserCheck, UserX, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { AlertDialog } from '@/components/Alert'
 import { Button } from '@/components/Button'
 import { FormError, FormField } from '@/components/FormField'
+import { Loader } from '@/components/Loader'
+import { memberAccessQuery, setMemberAccess, type MemberAccess } from '@/lib/access'
 import { ApiError } from '@/lib/api'
 import { changeMyPassword, initials, ROLE_LABEL, sessionQuery, updateMyName, type MemberRole } from '@/lib/auth'
 import { timeAgo } from '@/lib/format'
@@ -156,7 +158,7 @@ export function UserDetailsDrawer({ member, onClose, roles, isSelf }: UserDetail
                     <Detail label="Role">
                       <RoleTag role={member.role} />
                     </Detail>
-                    <Detail label="Access">
+                    <Detail label="Status">
                       <span className="inline-flex items-center gap-2">
                         <span
                           aria-hidden
@@ -172,6 +174,7 @@ export function UserDetailsDrawer({ member, onClose, roles, isSelf }: UserDetail
                       <span className="tabular-nums">{dateFormat.format(new Date(member.createdAt))}</span>
                     </Detail>
                   </Panel>
+                  <MemberAccessPanel key={member.id} member={member} />
                 </div>
 
                 {/* Deactivate far left; Edit then Delete (icon only) on the right. */}
@@ -265,6 +268,138 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
 function RoleTag({ role }: { role: MemberRole }) {
   const tone = role === 'staff' ? 'bg-surface-hover text-ink-2' : 'bg-secondary-soft text-secondary-text'
   return <span className={`rounded-md px-1.5 py-0.5 text-micro font-semibold ${tone}`}>{ROLE_LABEL[role]}</span>
+}
+
+/**
+ * The menus this person may open. Owners hold all of them implicitly; for
+ * managers and staff each press of Save replaces the whole set, so removing a
+ * tick removes the menu.
+ */
+function MemberAccessPanel({ member }: { member: Member }) {
+  const isOwner = member.role === 'owner'
+  const { data, isPending, isError, refetch } = useQuery({
+    ...memberAccessQuery(member.id),
+    enabled: !isOwner,
+  })
+
+  if (isOwner) {
+    return (
+      <section className="mt-3 overflow-hidden rounded-xl bg-surface shadow-lift">
+        <h3 className="border-b border-line bg-canvas/50 px-3.5 py-2 text-caption font-semibold text-ink-2">
+          Menu access
+        </h3>
+        <p className="flex items-start gap-2.5 px-3.5 py-3 text-body text-ink-2">
+          <ShieldCheck size={16} strokeWidth={1.9} className="mt-0.5 shrink-0 text-secondary-text" aria-hidden />
+          Owners can open every menu. Grant menus to managers and staff from here.
+        </p>
+      </section>
+    )
+  }
+
+  return (
+    <section className="mt-3 overflow-hidden rounded-xl bg-surface shadow-lift">
+      <h3 className="border-b border-line bg-canvas/50 px-3.5 py-2 text-caption font-semibold text-ink-2">
+        Menu access
+      </h3>
+      {isPending ? (
+        <div className="grid place-items-center py-8">
+          <Loader label="Loading menu access" />
+        </div>
+      ) : isError || !data ? (
+        <div className="px-3.5 py-4">
+          <p className="text-body text-ink-2">Couldn’t load their menu access.</p>
+          <Button size="sm" variant="secondary" className="mt-2" onClick={() => void refetch()}>
+            Try again
+          </Button>
+        </div>
+      ) : (
+        <MemberAccessEditor member={member} data={data} />
+      )}
+    </section>
+  )
+}
+
+/**
+ * The editable checklist, mounted once the server list has loaded. Its
+ * baseline is what the server last confirmed, so Save enables only for a real
+ * change and "Saved" survives until the next tick changes.
+ */
+function MemberAccessEditor({ member, data }: { member: Member; data: MemberAccess }) {
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(data.accessKeys))
+  const [baseline, setBaseline] = useState(() => data.accessKeys.join('|'))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+
+  const toggle = (key: string) => {
+    setSaved(false)
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const orderedKeys = data.items.filter((item) => selected.has(item.key)).map((item) => item.key)
+  const dirty = orderedKeys.join('|') !== baseline
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    setSaved(false)
+    try {
+      const next = await setMemberAccess(member.id, orderedKeys)
+      setSelected(new Set(next.accessKeys))
+      setBaseline(next.accessKeys.join('|'))
+      setSaved(true)
+    } catch (e) {
+      setError(failure(e, 'Couldn’t save menu access. Try again.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <>
+      {error && (
+        <div className="px-3.5 pt-3">
+          <FormError message={error} />
+        </div>
+      )}
+      <ul className="divide-y divide-line">
+        {data.items.map((item) => (
+          <li key={item.key}>
+            <label className="flex cursor-pointer items-center gap-3 px-3.5 py-2.5 hover:bg-surface-hover">
+              <input
+                type="checkbox"
+                className="size-4 shrink-0 accent-secondary"
+                checked={selected.has(item.key)}
+                onChange={() => toggle(item.key)}
+                disabled={saving}
+              />
+              <span className="text-body text-ink">{item.label}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-center gap-2 border-t border-line bg-canvas/50 px-3.5 py-2.5">
+        <p className="text-caption text-ink-3" aria-live="polite">
+          {selected.size} of {data.items.length} menus{saved && !dirty ? ' · Saved' : ''}
+        </p>
+        <Button
+          size="sm"
+          variant="primary"
+          className="ml-auto"
+          onClick={() => void save()}
+          loading={saving}
+          disabled={!dirty}
+        >
+          {saving ? 'Saving…' : 'Save access'}
+        </Button>
+      </div>
+    </>
+  )
 }
 
 interface EditUserFormProps {

@@ -15,6 +15,13 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
 import { Route as AuthedAdminRouteImport } from './routes/_authed/admin'
+import { Route as AuthedCalendarRouteImport } from './routes/_authed/calendar'
+import { Route as AuthedClientsRouteImport } from './routes/_authed/clients'
+import { Route as AuthedCrmRouteImport } from './routes/_authed/crm'
+import { Route as AuthedInvoicesRouteImport } from './routes/_authed/invoices'
+import { Route as AuthedMediaRouteImport } from './routes/_authed/media'
+import { Route as AuthedPaymentsBudgetRouteImport } from './routes/_authed/payments-budget'
+import { Route as AuthedProjectManagementRouteImport } from './routes/_authed/project-management'
 import { Route as AuthedAdminIndexRouteImport } from './routes/_authed/admin/index'
 import { Route as AuthedAdminUsersRouteImport } from './routes/_authed/admin/users'
 
@@ -47,6 +54,41 @@ const AuthedAdminRoute = AuthedAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedCalendarRoute = AuthedCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedClientsRoute = AuthedClientsRouteImport.update({
+  id: '/clients',
+  path: '/clients',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedCrmRoute = AuthedCrmRouteImport.update({
+  id: '/crm',
+  path: '/crm',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedInvoicesRoute = AuthedInvoicesRouteImport.update({
+  id: '/invoices',
+  path: '/invoices',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedMediaRoute = AuthedMediaRouteImport.update({
+  id: '/media',
+  path: '/media',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedPaymentsBudgetRoute = AuthedPaymentsBudgetRouteImport.update({
+  id: '/payments-budget',
+  path: '/payments-budget',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedProjectManagementRoute = AuthedProjectManagementRouteImport.update({
+  id: '/project-management',
+  path: '/project-management',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedAdminIndexRoute = AuthedAdminIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -64,6 +106,13 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/admin': typeof AuthedAdminRouteWithChildren
+  '/calendar': typeof AuthedCalendarRoute
+  '/clients': typeof AuthedClientsRoute
+  '/crm': typeof AuthedCrmRoute
+  '/invoices': typeof AuthedInvoicesRoute
+  '/media': typeof AuthedMediaRoute
+  '/payments-budget': typeof AuthedPaymentsBudgetRoute
+  '/project-management': typeof AuthedProjectManagementRoute
   '/admin/users': typeof AuthedAdminUsersRoute
   '/admin/': typeof AuthedAdminIndexRoute
 }
@@ -71,6 +120,13 @@ export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/calendar': typeof AuthedCalendarRoute
+  '/clients': typeof AuthedClientsRoute
+  '/crm': typeof AuthedCrmRoute
+  '/invoices': typeof AuthedInvoicesRoute
+  '/media': typeof AuthedMediaRoute
+  '/payments-budget': typeof AuthedPaymentsBudgetRoute
+  '/project-management': typeof AuthedProjectManagementRoute
   '/': typeof AuthedIndexRoute
   '/admin/users': typeof AuthedAdminUsersRoute
   '/admin': typeof AuthedAdminIndexRoute
@@ -82,6 +138,13 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/_authed/admin': typeof AuthedAdminRouteWithChildren
+  '/_authed/calendar': typeof AuthedCalendarRoute
+  '/_authed/clients': typeof AuthedClientsRoute
+  '/_authed/crm': typeof AuthedCrmRoute
+  '/_authed/invoices': typeof AuthedInvoicesRoute
+  '/_authed/media': typeof AuthedMediaRoute
+  '/_authed/payments-budget': typeof AuthedPaymentsBudgetRoute
+  '/_authed/project-management': typeof AuthedProjectManagementRoute
   '/_authed/': typeof AuthedIndexRoute
   '/_authed/admin/users': typeof AuthedAdminUsersRoute
   '/_authed/admin/': typeof AuthedAdminIndexRoute
@@ -94,11 +157,30 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/admin'
+    | '/calendar'
+    | '/clients'
+    | '/crm'
+    | '/invoices'
+    | '/media'
+    | '/payments-budget'
+    | '/project-management'
     | '/admin/users'
     | '/admin/'
   fileRoutesByTo: FileRoutesByTo
   to:
-    '/forgot-password' | '/login' | '/signup' | '/' | '/admin/users' | '/admin'
+    | '/forgot-password'
+    | '/login'
+    | '/signup'
+    | '/calendar'
+    | '/clients'
+    | '/crm'
+    | '/invoices'
+    | '/media'
+    | '/payments-budget'
+    | '/project-management'
+    | '/'
+    | '/admin/users'
+    | '/admin'
   id:
     | '__root__'
     | '/_authed'
@@ -106,6 +188,13 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/_authed/admin'
+    | '/_authed/calendar'
+    | '/_authed/clients'
+    | '/_authed/crm'
+    | '/_authed/invoices'
+    | '/_authed/media'
+    | '/_authed/payments-budget'
+    | '/_authed/project-management'
     | '/_authed/'
     | '/_authed/admin/users'
     | '/_authed/admin/'
@@ -162,6 +251,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedAdminRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/calendar': {
+      id: '/_authed/calendar'
+      path: '/calendar'
+      fullPath: '/calendar'
+      preLoaderRoute: typeof AuthedCalendarRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/clients': {
+      id: '/_authed/clients'
+      path: '/clients'
+      fullPath: '/clients'
+      preLoaderRoute: typeof AuthedClientsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/crm': {
+      id: '/_authed/crm'
+      path: '/crm'
+      fullPath: '/crm'
+      preLoaderRoute: typeof AuthedCrmRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/invoices': {
+      id: '/_authed/invoices'
+      path: '/invoices'
+      fullPath: '/invoices'
+      preLoaderRoute: typeof AuthedInvoicesRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/media': {
+      id: '/_authed/media'
+      path: '/media'
+      fullPath: '/media'
+      preLoaderRoute: typeof AuthedMediaRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/payments-budget': {
+      id: '/_authed/payments-budget'
+      path: '/payments-budget'
+      fullPath: '/payments-budget'
+      preLoaderRoute: typeof AuthedPaymentsBudgetRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/project-management': {
+      id: '/_authed/project-management'
+      path: '/project-management'
+      fullPath: '/project-management'
+      preLoaderRoute: typeof AuthedProjectManagementRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/admin/': {
       id: '/_authed/admin/'
       path: '/'
@@ -195,11 +333,25 @@ const AuthedAdminRouteWithChildren = AuthedAdminRoute._addFileChildren(
 
 interface AuthedRouteChildren {
   AuthedAdminRoute: typeof AuthedAdminRouteWithChildren
+  AuthedCalendarRoute: typeof AuthedCalendarRoute
+  AuthedClientsRoute: typeof AuthedClientsRoute
+  AuthedCrmRoute: typeof AuthedCrmRoute
+  AuthedInvoicesRoute: typeof AuthedInvoicesRoute
+  AuthedMediaRoute: typeof AuthedMediaRoute
+  AuthedPaymentsBudgetRoute: typeof AuthedPaymentsBudgetRoute
+  AuthedProjectManagementRoute: typeof AuthedProjectManagementRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedAdminRoute: AuthedAdminRouteWithChildren,
+  AuthedCalendarRoute: AuthedCalendarRoute,
+  AuthedClientsRoute: AuthedClientsRoute,
+  AuthedCrmRoute: AuthedCrmRoute,
+  AuthedInvoicesRoute: AuthedInvoicesRoute,
+  AuthedMediaRoute: AuthedMediaRoute,
+  AuthedPaymentsBudgetRoute: AuthedPaymentsBudgetRoute,
+  AuthedProjectManagementRoute: AuthedProjectManagementRoute,
   AuthedIndexRoute: AuthedIndexRoute,
 }
 

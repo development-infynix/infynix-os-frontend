@@ -3,7 +3,17 @@ import { useEffect, useState } from 'react'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 
-const TITLES: Record<string, string> = { '/': 'Overview', '/admin/users': 'System Management' }
+const TITLES: Record<string, string> = {
+  '/': 'Overview',
+  '/admin/users': 'System Management',
+  '/clients': 'Clients',
+  '/crm': 'CRM',
+  '/calendar': 'Calendar',
+  '/payments-budget': 'Payments & Budget',
+  '/project-management': 'Project Management',
+  '/invoices': 'Invoices',
+  '/media': 'Media',
+}
 
 /** The signed-in shell: sidebar on the left, header on top, the page below. */
 export function AppLayout() {

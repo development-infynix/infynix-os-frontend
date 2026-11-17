@@ -1,20 +1,61 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { House, LogOut, Users, X, type LucideIcon } from 'lucide-react'
+import {
+  CalendarDays,
+  Contact,
+  FolderKanban,
+  Handshake,
+  House,
+  Images,
+  LogOut,
+  ReceiptText,
+  Users,
+  Wallet,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 import { useState } from 'react'
 import { AlertDialog } from '@/components/Alert'
 import { Button } from '@/components/Button'
+import { hasAccess } from '@/lib/access'
 import { canAdminister, initials, ROLE_LABEL, sessionQuery, signOut, useSession } from '@/lib/auth'
 
+type NavPath =
+  | '/'
+  | '/admin/users'
+  | '/clients'
+  | '/crm'
+  | '/calendar'
+  | '/payments-budget'
+  | '/project-management'
+  | '/invoices'
+  | '/media'
+
 interface NavItem {
-  to: '/' | '/admin/users'
+  to: NavPath
   label: string
   icon: LucideIcon
+  /** Omitted for items everyone can open. */
+  access?: string
 }
 
-const MAIN_NAV: NavItem[] = [{ to: '/', label: 'Overview', icon: House }]
+const MAIN_NAV: NavItem[] = [
+  { to: '/', label: 'Overview', icon: House },
+  { to: '/clients', label: 'Clients', icon: Contact, access: 'clients' },
+  { to: '/crm', label: 'CRM', icon: Handshake, access: 'crm' },
+  { to: '/calendar', label: 'Calendar', icon: CalendarDays, access: 'calendar' },
+  { to: '/payments-budget', label: 'Payments & Budget', icon: Wallet, access: 'payments-budget' },
+  {
+    to: '/project-management',
+    label: 'Project Management',
+    icon: FolderKanban,
+    access: 'project-management',
+  },
+  { to: '/invoices', label: 'Invoices', icon: ReceiptText, access: 'invoices' },
+  { to: '/media', label: 'Media', icon: Images, access: 'media' },
+]
 
-/** The Admin section: rendered for owners only (the routes refuse everyone else too). */
+/** The owner's utility destination, pinned above the account footer. */
 const ADMIN_NAV: NavItem[] = [{ to: '/admin/users', label: 'System', icon: Users }]
 
 interface SidebarProps {
@@ -23,8 +64,10 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onClose }: SidebarProps) {
-  const { user, tenant } = useSession()
+  const session = useSession()
+  const { user, tenant } = session
   const isAdmin = canAdminister(user.role)
+  const nav = MAIN_NAV.filter((item) => !item.access || hasAccess(session, item.access))
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [confirmSignOut, setConfirmSignOut] = useState(false)
@@ -40,18 +83,19 @@ export function Sidebar({ onClose }: SidebarProps) {
 
   return (
     <div className="flex h-full flex-col bg-canvas">
-      <div className="flex h-header items-center gap-2 px-2.5 pt-2.5">
-        <div className="min-w-0 flex-1">
-          <div className="flex h-9 items-center gap-2.5 px-1.5">
-            <span
-              aria-hidden
-              className="grid size-6 shrink-0 place-items-center rounded-md bg-secondary text-caption font-semibold text-on-secondary"
-            >
-              {tenant.name.trim()[0]?.toUpperCase()}
-            </span>
-            <span className="truncate text-body font-semibold text-ink" title={tenant.name}>
+      <div className="flex h-header items-center gap-2 border-b border-line px-2.5">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 px-1.5">
+          <span
+            aria-hidden
+            className="grid size-7 shrink-0 place-items-center rounded-md bg-secondary text-caption font-semibold text-on-secondary"
+          >
+            I
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-body font-semibold leading-5 text-ink">Infynix</p>
+            <p className="truncate text-caption leading-4 text-ink-3" title={tenant.name}>
               {tenant.name}
-            </span>
+            </p>
           </div>
         </div>
         {onClose && (
@@ -66,49 +110,48 @@ export function Sidebar({ onClose }: SidebarProps) {
         )}
       </div>
 
-      <nav aria-label="Main" className="flex-1 overflow-y-auto px-2.5 pt-2">
-        <NavList items={MAIN_NAV} onNavigate={onClose} />
-        {isAdmin && (
-          <div className="mt-5">
-            <p id="nav-admin" className="px-2 pb-1.5 text-caption font-medium text-ink-3">
-              Admin
-            </p>
-            <NavList items={ADMIN_NAV} onNavigate={onClose} labelledBy="nav-admin" />
-          </div>
-        )}
+      <nav aria-label="Main" className="flex-1 overflow-y-auto px-2.5 pt-4">
+        <NavList items={nav} onNavigate={onClose} />
       </nav>
 
-      <div className="border-t border-line p-2.5">
-        <div className="flex items-center gap-2.5 rounded-lg p-2">
-          <span
-            aria-hidden
-            className="grid size-8 shrink-0 place-items-center rounded-md bg-secondary text-caption font-semibold text-on-secondary"
-          >
-            {initials(user.fullName)}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="flex items-center gap-2 text-body font-semibold leading-5 text-ink">
-              <span className="truncate">{user.fullName}</span>
-              <span className="shrink-0 rounded-md bg-secondary-soft px-1.5 py-px text-micro font-semibold leading-4 text-secondary-text">
-                {ROLE_LABEL[user.role]}
-              </span>
-            </p>
-            <p className="truncate text-caption leading-4 text-ink-3" title={user.email}>
-              {user.email}
-            </p>
+      <div className="border-t border-line">
+        {isAdmin && (
+          <nav aria-label="Admin" className="border-b border-line px-2.5 py-2">
+            <NavList items={ADMIN_NAV} onNavigate={onClose} />
+          </nav>
+        )}
+        <div className="p-2.5">
+          <div className="flex items-center gap-2.5 rounded-lg p-2">
+            <span
+              aria-hidden
+              className="grid size-8 shrink-0 place-items-center rounded-md bg-secondary text-caption font-semibold text-on-secondary"
+            >
+              {initials(user.fullName)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="flex items-center gap-2 text-body font-semibold leading-5 text-ink">
+                <span className="truncate">{user.fullName}</span>
+                <span className="shrink-0 rounded-md bg-secondary-soft px-1.5 py-px text-micro font-semibold leading-4 text-secondary-text">
+                  {ROLE_LABEL[user.role]}
+                </span>
+              </p>
+              <p className="truncate text-caption leading-4 text-ink-3" title={user.email}>
+                {user.email}
+              </p>
+            </div>
           </div>
+          {/* Signing out is red here and in its confirmation, so the two always match. */}
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => setConfirmSignOut(true)}
+            aria-haspopup="dialog"
+            className="mt-3 w-full"
+          >
+            <LogOut size={15} strokeWidth={2} aria-hidden />
+            Sign out
+          </Button>
         </div>
-        {/* Signing out is red here and in its confirmation, so the two always match. */}
-        <Button
-          variant="danger"
-          size="sm"
-          onClick={() => setConfirmSignOut(true)}
-          aria-haspopup="dialog"
-          className="mt-3 w-full"
-        >
-          <LogOut size={15} strokeWidth={2} aria-hidden />
-          Sign out
-        </Button>
       </div>
 
       <AlertDialog
@@ -132,16 +175,16 @@ export function Sidebar({ onClose }: SidebarProps) {
   )
 }
 
-function NavList({ items, onNavigate, labelledBy }: { items: NavItem[]; onNavigate?: () => void; labelledBy?: string }) {
+function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
   return (
-    <ul className="flex flex-col gap-0.5" aria-labelledby={labelledBy}>
+    <ul className="flex flex-col divide-y divide-line">
       {items.map(({ to, label, icon: Icon }) => (
-        <li key={to}>
+        <li key={to} className="py-1 first:pt-0 last:pb-0">
           <Link
             to={to}
             onClick={onNavigate}
             activeOptions={{ exact: to === '/' }}
-            className="group flex h-8 items-center gap-2.5 rounded-md px-2 text-body font-medium text-ink-2 transition-colors duration-100 hover:bg-surface-hover hover:text-ink data-[status=active]:bg-secondary-soft data-[status=active]:text-secondary-text"
+            className="group flex h-8 items-center gap-2.5 rounded-md px-2 text-body font-medium text-ink-2 transition duration-100 hover:bg-surface-hover hover:text-ink data-[status=active]:[background:var(--btn-primary-bg)] data-[status=active]:[box-shadow:var(--btn-primary-shadow)] data-[status=active]:text-on-primary data-[status=active]:hover:brightness-[1.06] data-[status=active]:hover:text-on-primary"
           >
             <Icon size={16} strokeWidth={1.9} className="shrink-0" />
             {label}
