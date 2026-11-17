@@ -5,7 +5,13 @@ import * as XLSX from 'xlsx'
 import { Button } from '@/components/Button'
 import { FormError, FormField } from '@/components/FormField'
 import { Modal } from '@/components/Modal'
-import { CLIENTS_KEY, importClientsChunk, type ClientInput } from '@/lib/clients'
+import {
+  CLIENTS_KEY,
+  CLIENT_IMPORTS_KEY,
+  createClientImport,
+  importClientsChunk,
+  type ClientInput,
+} from '@/lib/clients'
 
 const STEPS = ['Upload file', 'Match fields', 'Select fields', 'Preview'] as const
 const MAX_ROWS = 500
@@ -77,6 +83,7 @@ export function ClientImportModal({
   const [file, setFile] = useState<ParsedFile | null>(null)
   const [mapping, setMapping] = useState<FieldMapping>({ name: '', email: '', phone: '' })
   const [customFields, setCustomFields] = useState<string[]>([])
+  const [importName, setImportName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null)
@@ -87,6 +94,7 @@ export function ClientImportModal({
     setFile(null)
     setMapping({ name: '', email: '', phone: '' })
     setCustomFields([])
+    setImportName('')
     setError(null)
     setImporting(false)
     setProgress(null)
@@ -118,6 +126,7 @@ export function ClientImportModal({
       setFile(parsed)
       setMapping(guessMapping(parsed.headers))
       setCustomFields([])
+      setImportName(selected.name.replace(/\.[^.]+$/, ''))
       setError(null)
       setStep(2)
     } catch {
@@ -158,14 +167,20 @@ export function ClientImportModal({
     let created = 0
     let skipped = invalid
     try {
+      const job = await createClientImport({
+        name: importName.trim(),
+        fileName: file.name,
+        rowCount: file.rows.length,
+      })
       for (let index = 0; index < payloads.length; index += CHUNK_SIZE) {
         const chunk = payloads.slice(index, index + CHUNK_SIZE)
-        const outcome = await importClientsChunk(chunk)
+        const outcome = await importClientsChunk(job.id, chunk)
         created += outcome.created
         skipped += outcome.skipped
         setProgress({ current: Math.min(index + chunk.length, payloads.length), total: payloads.length })
       }
       await queryClient.invalidateQueries({ queryKey: CLIENTS_KEY })
+      await queryClient.invalidateQueries({ queryKey: CLIENT_IMPORTS_KEY })
       setResult({ created, skipped })
     } catch {
       setError('Couldn’t finish the import. Try again.')
@@ -319,6 +334,20 @@ export function ClientImportModal({
               </div>
             ) : (
               <div>
+                <div className="mb-4">
+                  <FormField label="Import name" htmlFor="import-job-name" hint="A name to find this import later.">
+                    <input
+                      id="import-job-name"
+                      type="text"
+                      required
+                      className="field-input"
+                      value={importName}
+                      onChange={(event) => setImportName(event.target.value)}
+                      disabled={importing}
+                      placeholder="Name this import"
+                    />
+                  </FormField>
+                </div>
                 <p className="text-label text-ink-2">
                   Previewing {preview.length} of {file?.rows.length ?? 0} rows.
                 </p>
@@ -374,7 +403,12 @@ export function ClientImportModal({
             </Button>
           )}
           {!result && step === 4 && (
-            <Button variant="primary" onClick={() => void runImport()} loading={importing}>
+            <Button
+              variant="primary"
+              onClick={() => void runImport()}
+              loading={importing}
+              disabled={!importName.trim()}
+            >
               {importing ? 'Importing…' : `Import ${file?.rows.length ?? 0} clients`}
             </Button>
           )}
