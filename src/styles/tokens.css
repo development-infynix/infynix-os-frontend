@@ -51,6 +51,10 @@
     0 4px 12px -2px rgb(43 36 24 / 0.06);
   --shadow-dialog: 0 0 0 1px rgb(43 36 24 / 0.07), 0 8px 16px -4px rgb(43 36 24 / 0.1),
     0 24px 48px -12px rgb(43 36 24 / 0.18);
+  /* The recessed groove a segmented control sits in: soft top shade, light
+     bottom lip, hairline edge. The one place depth goes inward, not up. */
+  --shadow-well: inset 0 1px 3px rgb(43 36 24 / 0.1), inset 0 -1px 0 rgb(255 255 255 / 0.55),
+    inset 0 0 0 1px rgb(43 36 24 / 0.09);
 
   /* Buttons: lit from above (gradient + top highlight + ring + short drop). */
   --btn-primary-bg: linear-gradient(180deg, #03936f 0%, #017c5f 100%);
@@ -101,6 +105,8 @@
 
   --shadow-lift: 0 0 0 1px rgb(255 255 255 / 0.07);
   --shadow-dialog: 0 0 0 1px rgb(255 255 255 / 0.09), 0 24px 48px -12px rgb(0 0 0 / 0.6);
+  --shadow-well: inset 0 1px 3px rgb(0 0 0 / 0.55), inset 0 -1px 0 rgb(255 255 255 / 0.045),
+    inset 0 0 0 1px rgb(255 255 255 / 0.06);
 
   --btn-primary-bg: linear-gradient(180deg, #03936f 0%, #017c5f 100%);
   --btn-primary-shadow: 0 0 0 1px rgb(63 191 148 / 0.35), inset 0 1px 0 rgb(255 255 255 / 0.18),
@@ -164,6 +170,7 @@
 
   --shadow-lift: var(--shadow-lift);
   --shadow-dialog: var(--shadow-dialog);
+  --shadow-well: var(--shadow-well);
 
   /* Layout. */
   --spacing-sidebar: 248px;

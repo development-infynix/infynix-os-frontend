@@ -94,7 +94,7 @@ export function UserDetailsDrawer({ member, onClose, roles, isSelf }: UserDetail
             <div className="flex items-start gap-3 border-b border-line px-5 py-4">
               <span
                 aria-hidden
-                className={`grid size-10 shrink-0 place-items-center rounded-lg text-body font-semibold ${
+                className={`grid size-10 shrink-0 place-items-center rounded-md text-body font-semibold ${
                   member.isActive ? 'bg-secondary text-on-secondary' : 'bg-surface-hover text-ink-3'
                 }`}
               >
@@ -142,21 +142,19 @@ export function UserDetailsDrawer({ member, onClose, roles, isSelf }: UserDetail
               />
             ) : (
               <>
-                <div className="flex-1 overflow-y-auto px-5 py-5">
-                  <FormError message={error} />
-                  <dl className="divide-y divide-line">
+                <div className="flex-1 overflow-y-auto bg-canvas px-4 py-4">
+                  {error && (
+                    <div className="mb-3">
+                      <FormError message={error} />
+                    </div>
+                  )}
+                  <Panel title="Account">
                     <Detail label="Name">{member.fullName}</Detail>
-                    <Detail label="Email">{member.email}</Detail>
+                    <Detail label="Email">
+                      <span className="break-all">{member.email}</span>
+                    </Detail>
                     <Detail label="Role">
-                      <span
-                        className={`rounded-md px-1.5 py-0.5 text-micro font-semibold ${
-                          member.role === 'staff'
-                            ? 'bg-surface-hover text-ink-2'
-                            : 'bg-secondary-soft text-secondary-text'
-                        }`}
-                      >
-                        {ROLE_LABEL[member.role]}
-                      </span>
+                      <RoleTag role={member.role} />
                     </Detail>
                     <Detail label="Access">
                       <span className="inline-flex items-center gap-2">
@@ -164,12 +162,16 @@ export function UserDetailsDrawer({ member, onClose, roles, isSelf }: UserDetail
                           aria-hidden
                           className={`size-1.5 rounded-full ${member.isActive ? 'bg-secondary' : 'bg-ink-3'}`}
                         />
-                        {member.isActive ? 'Can sign in' : 'Deactivated'}
+                        {member.isActive ? 'Active' : 'Deactivated'}
                       </span>
                     </Detail>
-                    <Detail label="Last sign-in">{timeAgo(member.lastLoginAt)}</Detail>
-                    <Detail label="Added">{dateFormat.format(new Date(member.createdAt))}</Detail>
-                  </dl>
+                    <Detail label="Last sign-in">
+                      <span className="tabular-nums">{timeAgo(member.lastLoginAt)}</span>
+                    </Detail>
+                    <Detail label="Added">
+                      <span className="tabular-nums">{dateFormat.format(new Date(member.createdAt))}</span>
+                    </Detail>
+                  </Panel>
                 </div>
 
                 {/* Deactivate far left; Edit then Delete (icon only) on the right. */}
@@ -229,13 +231,40 @@ export function UserDetailsDrawer({ member, onClose, roles, isSelf }: UserDetail
   )
 }
 
+/**
+ * A paper card of facts inside the drawer body: a title row, then one field per
+ * row with a hairline between them. Sits on `--canvas` with Lift, like every
+ * other content container (DESIGN.md: Cards / Containers).
+ */
+function Panel({ title, className = '', children }: { title: string; className?: string; children: ReactNode }) {
+  const id = useId()
+  return (
+    <section aria-labelledby={id} className={`overflow-hidden rounded-xl bg-surface shadow-lift ${className}`}>
+      <h3
+        id={id}
+        className="border-b border-line bg-canvas/50 px-3.5 py-2 text-caption font-semibold text-ink-2"
+      >
+        {title}
+      </h3>
+      <dl className="divide-y divide-line">{children}</dl>
+    </section>
+  )
+}
+
+/** One field: a Label-weight label in `--ink-2`, then the value at body size in `--ink`. */
 function Detail({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid grid-cols-[7.5rem_1fr] items-baseline gap-3 py-3 first:pt-0">
-      <dt className="text-label text-ink-3">{label}</dt>
+    <div className="grid grid-cols-[6.5rem_1fr] items-baseline gap-3 px-3.5 py-2.5">
+      <dt className="text-label font-medium text-ink-2">{label}</dt>
       <dd className="min-w-0 break-words text-body text-ink">{children}</dd>
     </div>
   )
+}
+
+/** The person's role as a chip: green wash with green text, neutral for staff. */
+function RoleTag({ role }: { role: MemberRole }) {
+  const tone = role === 'staff' ? 'bg-surface-hover text-ink-2' : 'bg-secondary-soft text-secondary-text'
+  return <span className={`rounded-md px-1.5 py-0.5 text-micro font-semibold ${tone}`}>{ROLE_LABEL[role]}</span>
 }
 
 interface EditUserFormProps {
@@ -292,7 +321,7 @@ function EditUserForm({ member, roles, onBusyChange, onCancel, onSaved }: EditUs
       }}
       className="flex min-h-0 flex-1 flex-col"
     >
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 py-5">
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-canvas px-5 py-5">
         <FormError message={error} />
         <FormField label="Name" htmlFor="user-name">
           <input
@@ -431,7 +460,7 @@ function EditSelfForm({ member, onBusyChange, onCancel, onSaved }: EditSelfFormP
       }}
       className="flex min-h-0 flex-1 flex-col"
     >
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 py-5">
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-canvas px-5 py-5">
         <FormError message={error} />
         <FormField label="Name" htmlFor="self-name">
           <input

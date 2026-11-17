@@ -2,22 +2,29 @@ import type { ReactNode } from 'react'
 
 interface FormFieldProps {
   label: string
-  htmlFor: string
+  /** Id of the control the label points at; omit for a group (radios, switches). */
+  htmlFor?: string
   error?: string
   hint?: ReactNode
   children: ReactNode
 }
 
+const LABEL = 'mb-1.5 block text-label font-medium text-ink-2'
+
 /** Label, control, then the error (or a hint). Pair with `.field-input`. */
 export function FormField({ label, htmlFor, error, hint, children }: FormFieldProps) {
   return (
-    <div>
-      <label htmlFor={htmlFor} className="mb-1.5 block text-label font-medium text-ink-2">
-        {label}
-      </label>
+    <div role={htmlFor ? undefined : 'group'} aria-label={htmlFor ? undefined : label}>
+      {htmlFor ? (
+        <label htmlFor={htmlFor} className={LABEL}>
+          {label}
+        </label>
+      ) : (
+        <span className={LABEL}>{label}</span>
+      )}
       {children}
       {error ? (
-        <p id={`${htmlFor}-error`} className="mt-1.5 text-caption text-danger">
+        <p id={htmlFor && `${htmlFor}-error`} className="mt-1.5 text-caption text-danger">
           {error}
         </p>
       ) : (

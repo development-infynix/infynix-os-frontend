@@ -148,20 +148,37 @@ export function AddUserDialog({ open, onOpenChange, roles }: AddUserDialogProps)
               </form.Field>
               <form.Field name="role">
                 {(field) => (
-                  <FormField label="Role" htmlFor="add-role" hint={ROLE_HINT[field.state.value]}>
-                    <select
-                      id="add-role"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value as MemberRole)}
-                      disabled={roles.length === 1}
-                      className="field-input"
-                    >
-                      {roles.map((r) => (
-                        <option key={r} value={r}>
-                          {ROLE_LABEL[r]}
-                        </option>
-                      ))}
-                    </select>
+                  <FormField label="Role" hint={ROLE_HINT[field.state.value]}>
+                    {/* A two-position switch: the roles are a choice of one, not a list to scroll. */}
+                    <div className="inline-flex gap-1 rounded-xl bg-canvas p-1.5 shadow-well">
+                      {roles.map((r) => {
+                        const selected = field.state.value === r
+                        const id = `add-role-${r}`
+                        return (
+                          <label
+                            key={r}
+                            htmlFor={id}
+                            className={`inline-flex h-8 min-w-[6.5rem] cursor-pointer items-center justify-center rounded-lg px-5 text-label transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--focus)] ${
+                              selected
+                                ? 'btn btn-primary'
+                                : 'font-medium text-ink-2 hover:bg-surface-hover hover:text-ink'
+                            }`}
+                          >
+                            <input
+                              id={id}
+                              type="radio"
+                              name="add-role"
+                              value={r}
+                              checked={selected}
+                              disabled={roles.length === 1}
+                              onChange={() => field.handleChange(r)}
+                              className="sr-only"
+                            />
+                            {ROLE_LABEL[r]}
+                          </label>
+                        )
+                      })}
+                    </div>
                   </FormField>
                 )}
               </form.Field>
