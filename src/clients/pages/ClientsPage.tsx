@@ -7,6 +7,7 @@ import { Loader } from '@/components/Loader'
 import { Pagination } from '@/components/Pagination'
 import { clientQuery, clientsPageQuery, hasContact, type Client } from '@/lib/clients'
 import { AddClientDialog } from '../components/AddClientDialog'
+import { ClientImportModal } from '../components/ClientImportModal'
 import { ClientDetailsDrawer } from '../components/ClientDetailsDrawer'
 import { SearchClientsDialog } from '../components/SearchClientsDialog'
 
@@ -34,6 +35,7 @@ export function ClientsPage() {
     }
   }, [data, page, q, navigate])
   const [adding, setAdding] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [searching, setSearching] = useState(false)
   // The client in the details drawer: opened from a row or from search (they
   // may not be on this page). Loaded by id so it stays fresh after an edit;
@@ -59,7 +61,10 @@ export function ClientsPage() {
         >
           <Search size={16} strokeWidth={2} className="shrink-0" aria-hidden />
         </Button>
-        <AddClientMenu onForm={() => setAdding(true)} />
+        <AddClientMenu
+          onForm={() => setAdding(true)}
+          onImport={() => setImporting(true)}
+        />
       </div>
 
       {/* Phones: one card per client. Tablet and up: one panel holding the table. */}
@@ -82,7 +87,7 @@ export function ClientsPage() {
           <>
             <ul
               aria-busy={busy}
-              className="max-h-[calc(100dvh-11rem)] flex flex-col gap-3 overflow-y-auto overscroll-contain pb-20 sm:hidden sm:max-h-none sm:overflow-visible sm:pb-0"
+              className="max-h-[calc(100dvh-11rem)] flex flex-col gap-3 overflow-y-auto overscroll-contain pb-20 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:hidden sm:max-h-none sm:overflow-visible sm:pb-0"
             >
               {data.items.map((client) => (
                 <li key={client.id} className="rounded-xl bg-surface p-4 shadow-lift">
@@ -191,6 +196,7 @@ export function ClientsPage() {
       </div>
 
       <AddClientDialog open={adding} onOpenChange={setAdding} />
+      <ClientImportModal open={importing} onOpenChange={setImporting} />
       <SearchClientsDialog open={searching} onOpenChange={setSearching} onSelect={viewClient} />
       <ClientDetailsDrawer key={viewing?.id ?? 'closed'} client={viewing} onClose={() => setPicked(null)} />
     </div>
@@ -210,7 +216,7 @@ function ContactTile() {
 }
 
 /** Add client entry points: the form now, spreadsheet import later. */
-function AddClientMenu({ onForm }: { onForm: () => void }) {
+function AddClientMenu({ onForm, onImport }: { onForm: () => void; onImport: () => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -267,12 +273,14 @@ function AddClientMenu({ onForm }: { onForm: () => void }) {
           <button
             type="button"
             role="menuitem"
-            disabled
-            title="Coming soon"
-            className="flex w-full cursor-not-allowed items-center gap-2.5 px-3 py-2 text-left text-body text-ink-3 opacity-50"
+            onClick={() => {
+              setOpen(false)
+              onImport()
+            }}
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-body text-ink-2 hover:bg-surface-hover hover:text-ink"
           >
             <FileSpreadsheet size={15} strokeWidth={1.9} aria-hidden />
-            Excel import
+            Imports
           </button>
         </div>
       )}

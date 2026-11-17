@@ -119,7 +119,7 @@ function SearchPanel({ onSelect }: { onSelect: (client: Client) => void }) {
               </Button>
             </div>
           </div>
-        ) : pending && !items.length ? (
+        ) : pending ? (
           <div className="grid h-full place-items-center">
             <Loader label="Searching clients" />
           </div>
@@ -130,7 +130,7 @@ function SearchPanel({ onSelect }: { onSelect: (client: Client) => void }) {
             id={listId}
             role="listbox"
             aria-label="Matching clients"
-            className={`flex flex-col gap-0.5 transition-opacity ${pending ? 'opacity-60' : ''}`}
+            className="flex flex-col gap-0.5"
           >
             {items.map((client, index) => (
               <li

@@ -88,4 +88,11 @@ export const addClient = (input: ClientInput) =>
 export const updateClient = (id: string, patch: Partial<ClientInput>) =>
   api<Client>(`/clients/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
 
+/** One chunk of an import, at most 100 rows. */
+export const importClientsChunk = (clients: ClientInput[]) =>
+  api<{ created: number; skipped: number }>('/clients/import', {
+    method: 'POST',
+    body: JSON.stringify({ clients }),
+  })
+
 export const removeClient = (id: string) => api<void>(`/clients/${id}`, { method: 'DELETE' })

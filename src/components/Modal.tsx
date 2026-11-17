@@ -9,6 +9,8 @@ export interface ModalProps {
   children: ReactNode
   /** While true (a save in flight), Escape and the close button do nothing. */
   busy?: boolean
+  /** Wider sheet for content like import wizards and preview tables. */
+  wide?: boolean
 }
 
 /**
@@ -16,7 +18,7 @@ export interface ModalProps {
  * focus is trapped while open and returns to the trigger, Escape closes, and
  * it renders above everything. Put the form, with its own buttons, inside.
  */
-export function Modal({ open, onOpenChange, title, description, children, busy = false }: ModalProps) {
+export function Modal({ open, onOpenChange, title, description, children, busy = false, wide = false }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const descId = useId()
@@ -40,7 +42,9 @@ export function Modal({ open, onOpenChange, title, description, children, busy =
         close()
       }}
       onKeyDown={(e) => e.key === 'Escape' && e.stopPropagation()}
-      className="app-dialog m-auto w-[calc(100%-32px)] max-w-dialog rounded-xl border-0 bg-surface p-0 text-ink shadow-dialog"
+      className={`app-dialog m-auto w-[calc(100%-32px)] rounded-xl border-0 bg-surface p-0 text-ink shadow-dialog ${
+        wide ? 'sm:max-w-[44rem]' : 'max-w-dialog'
+      }`}
     >
       {open && (
         <>

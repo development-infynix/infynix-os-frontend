@@ -107,7 +107,7 @@ export function UsersPage() {
           <>
             <ul
               aria-busy={busy}
-              className="max-h-[calc(100dvh-11rem)] flex flex-col gap-3 overflow-y-auto overscroll-contain pb-20 sm:hidden sm:max-h-none sm:overflow-visible sm:pb-0"
+              className="max-h-[calc(100dvh-11rem)] flex flex-col gap-3 overflow-y-auto overscroll-contain pb-20 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:hidden sm:max-h-none sm:overflow-visible sm:pb-0"
             >
               {data.items.map((m) => {
                 const isSelf = m.id === user.id
