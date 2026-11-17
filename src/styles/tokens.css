@@ -17,7 +17,7 @@
   color-scheme: light;
 
   /* Swiss paper: warm off-white surfaces on a light stone ground, warm inks. */
-  --canvas: #f3f0e8;
+  --canvas: #f5f2e4;
   --surface: #fbf9f4;
   --surface-hover: #ede9df;
 
@@ -75,7 +75,7 @@
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --canvas: #0c0d0e;
+  --canvas: #111112;
   --surface: #141517;
   --surface-hover: #1c1d20;
 
