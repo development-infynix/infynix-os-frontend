@@ -249,7 +249,7 @@ Dark theme replaces the Lift with a white hairline ring and the Dialog with a de
 
 Rectangles with gently curved corners, sized by role: 8px for buttons and inputs, 6px for navigation rows and chips, 12px for panels and drawers, 4px for the smallest tags. Borders are 1px warm hairlines, often delivered as a ring-like shadow rather than a `border`.
 
-Circular shapes are reserved for status dots; avatars are 6px squares with initials, not circles. No pills for containers, no cut corners, no hard offset shadows, no decorative clipping.
+Circular shapes are reserved for status dots and the header theme toggle; avatars are 6px squares with initials, not circles. No pills for containers, no cut corners, no hard offset shadows, no decorative clipping.
 
 ## Components
 
