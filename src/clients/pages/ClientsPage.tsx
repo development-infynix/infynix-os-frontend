@@ -15,11 +15,13 @@ import { Loader } from '@/components/Loader'
 import { Pagination } from '@/components/Pagination'
 import {
   CLIENTS_KEY,
+  CLIENT_IMPORTS_KEY,
   clientImportsQuery,
   clientQuery,
   clientsPageQuery,
   hasContact,
   removeClient,
+  removeClients,
   type Client,
 } from '@/lib/clients'
 import { AddClientDialog } from '../components/AddClientDialog'
@@ -33,6 +35,7 @@ const dateFormat = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: '
 const addedOn = (iso: string) => dateFormat.format(new Date(iso))
 
 const route = getRouteApi('/_authed/clients')
+const TAB_STORAGE_KEY = 'infynix-clients-tab'
 
 type Tab = 'clients' | 'imports'
 
@@ -43,8 +46,16 @@ export function ClientsPage() {
   const importFilter = route.useSearch({ select: (s) => s.importId ?? null })
   const navigate = route.useNavigate()
   const queryClient = useQueryClient()
-  const [tab, setTab] = useState<Tab>('clients')
+  const [tab, setTab] = useState<Tab>(() =>
+    localStorage.getItem(TAB_STORAGE_KEY) === 'imports' ? 'imports' : 'clients',
+  )
   const [deleting, setDeleting] = useState<Client | null>(null)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    localStorage.setItem(TAB_STORAGE_KEY, tab)
+  }, [tab])
   const tabsId = useId()
   const clientsTabId = `${tabsId}-clients-tab`
   const importsTabId = `${tabsId}-imports-tab`
@@ -65,14 +76,23 @@ export function ClientsPage() {
     setTab(next)
     document.getElementById(next === 'clients' ? clientsTabId : importsTabId)?.focus()
   }
-  const { data, isPending, isFetching, isError, isPlaceholderData, refetch } = useQuery(
-    clientsPageQuery(page, q, importFilter),
-  )
+  const { data, isPending, isFetching, isError, isPlaceholderData, refetch } = useQuery({
+    ...clientsPageQuery(page, q, importFilter),
+    enabled: tab === 'clients',
+  })
   const busy = isFetching && isPlaceholderData
 
   const goTo = (next: number) => void navigate({ search: { page: next, q, importId: importFilter ?? undefined } })
   const changeImportFilter = (value: string | null) =>
     void navigate({ search: { page: 1, q: '', importId: value ?? undefined } })
+
+  const toggleSelected = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   // A page that no longer exists (the last client on it was deleted, or an old
   // link): go to the last page that does.
@@ -125,21 +145,33 @@ export function ClientsPage() {
           </TabButton>
         </div>
         <div className="flex items-center gap-2">
-          {tab === 'clients' && (
-            <>
+          {tab === 'clients' &&
+            (selected.size > 0 ? (
               <Button
-                variant="secondary"
-                onClick={() => setSearching(true)}
-                aria-haspopup="dialog"
-                aria-label="Search clients"
-                title="Search clients"
-                className="w-9 px-0!"
+                variant="danger"
+                onClick={() => setConfirmBulkDelete(true)}
+                aria-label={`Delete ${selected.size} selected clients`}
+                title={`Delete ${selected.size} selected clients`}
+                className="w-9 px-0! sm:w-auto sm:px-3.5!"
               >
-                <Search size={16} strokeWidth={2} className="shrink-0" aria-hidden />
+                <Trash2 size={16} strokeWidth={2} className="shrink-0" aria-hidden />
+                <span className="hidden sm:inline">Delete {selected.size}</span>
               </Button>
-              <ImportFilterMenu value={importFilter} onChange={changeImportFilter} />
-            </>
-          )}
+            ) : (
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => setSearching(true)}
+                  aria-haspopup="dialog"
+                  aria-label="Search clients"
+                  title="Search clients"
+                  className="w-9 px-0!"
+                >
+                  <Search size={16} strokeWidth={2} className="shrink-0" aria-hidden />
+                </Button>
+                <ImportFilterMenu value={importFilter} onChange={changeImportFilter} />
+              </>
+            ))}
           <AddClientMenu
             onForm={() => setAdding(true)}
             onImport={() => setImporting(true)}
@@ -176,8 +208,15 @@ export function ClientsPage() {
                 className="max-h-[calc(100dvh-11rem)] flex flex-col gap-3 overflow-y-auto overscroll-contain pb-20 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:hidden sm:max-h-none sm:overflow-visible sm:pb-0"
               >
                 {data.items.map((client) => (
-                  <li key={client.id} className="rounded-xl bg-surface p-4 shadow-lift">
-                    <div className="flex items-start gap-3">
+                  <li key={client.id} className="relative rounded-xl bg-surface p-4 shadow-lift">
+                    <div className="absolute top-3 right-3">
+                      <SelectClientButton
+                        client={client}
+                        selected={selected.has(client.id)}
+                        onToggle={toggleSelected}
+                      />
+                    </div>
+                    <div className="flex items-start gap-3 pr-8">
                       <ContactTile />
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium text-ink">{client.name}</p>
@@ -210,16 +249,19 @@ export function ClientsPage() {
                 <table className="w-full table-fixed text-left text-body">
                   <thead className="sticky top-0 z-10 bg-surface text-caption font-medium text-ink-3">
                     <tr className="bg-canvas/60 shadow-[inset_0_-1px_0_var(--line-strong)]">
-                      <th scope="col" className="w-[26%] px-4 py-2.5 font-medium">
+                      <th scope="col" className="w-9 py-2.5 pl-4 pr-1">
+                        <span className="sr-only">Select</span>
+                      </th>
+                      <th scope="col" className="w-[24%] px-4 py-2.5 font-medium">
                         Name
                       </th>
-                      <th scope="col" className="w-[27%] px-4 py-2.5 font-medium">
+                      <th scope="col" className="w-[25%] px-4 py-2.5 font-medium">
                         Email
                       </th>
-                      <th scope="col" className="w-[19%] px-4 py-2.5 font-medium">
+                      <th scope="col" className="w-[18%] px-4 py-2.5 font-medium">
                         Phone
                       </th>
-                      <th scope="col" className="w-[16%] px-4 py-2.5 font-medium whitespace-nowrap">
+                      <th scope="col" className="w-[15%] px-4 py-2.5 font-medium whitespace-nowrap">
                         Added
                       </th>
                       <th scope="col" className="w-24 px-4 py-2.5 text-right font-medium whitespace-nowrap">
@@ -230,6 +272,14 @@ export function ClientsPage() {
                   <tbody>
                     {data.items.map((client) => (
                       <tr key={client.id} className="border-b border-line">
+                        <td className="py-3 pl-4 pr-1">
+                          <SelectClientButton
+                            client={client}
+                            selected={selected.has(client.id)}
+                            onToggle={toggleSelected}
+                            compact
+                          />
+                        </td>
                         <td className="max-w-0 px-4 py-3">
                           <div className="flex items-center gap-3">
                             <ContactTile />
@@ -313,8 +363,31 @@ export function ClientsPage() {
         onConfirm={async () => {
           if (!deleting) return
           await removeClient(deleting.id)
-          await queryClient.invalidateQueries({ queryKey: CLIENTS_KEY })
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: CLIENTS_KEY }),
+            queryClient.invalidateQueries({ queryKey: CLIENT_IMPORTS_KEY }),
+          ])
           setDeleting(null)
+        }}
+      />
+      <AlertDialog
+        open={confirmBulkDelete}
+        onOpenChange={setConfirmBulkDelete}
+        tone="danger"
+        icon={null}
+        width="compact"
+        title={`Delete ${selected.size} clients?`}
+        description="These clients are removed from the directory. Import counts will be updated. This can’t be undone."
+        confirmLabel="Delete"
+        pendingLabel="Deleting…"
+        onConfirm={async () => {
+          await removeClients([...selected])
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: CLIENTS_KEY }),
+            queryClient.invalidateQueries({ queryKey: CLIENT_IMPORTS_KEY }),
+          ])
+          setSelected(new Set())
+          setConfirmBulkDelete(false)
         }}
       />
     </div>
@@ -331,7 +404,7 @@ function ImportFilterMenu({
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const { data: imports = [] } = useQuery(clientImportsQuery())
+  const { data: imports = [] } = useQuery({ ...clientImportsQuery(), enabled: open })
 
   useEffect(() => {
     if (!open) return
@@ -418,6 +491,36 @@ function ImportFilterMenu({
         </ul>
       )}
     </div>
+  )
+}
+
+/** Circular select control used in both the table and the mobile cards. */
+function SelectClientButton({
+  client,
+  selected,
+  onToggle,
+  compact = false,
+}: {
+  client: Client
+  selected: boolean
+  onToggle: (id: string) => void
+  compact?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={selected}
+      aria-label={`Select ${client.name}`}
+      onClick={() => onToggle(client.id)}
+      className={`grid ${compact ? 'size-4' : 'size-5'} shrink-0 place-items-center rounded-full border transition-colors ${
+        selected
+          ? 'border-secondary bg-secondary text-on-secondary'
+          : 'border-line-strong text-transparent hover:border-ink-3'
+      }`}
+    >
+      <Check size={compact ? 10 : 12} strokeWidth={3} aria-hidden />
+    </button>
   )
 }
 

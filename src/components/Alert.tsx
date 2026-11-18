@@ -31,6 +31,8 @@ export interface AlertDialogProps {
    * the same from `sm` up.
    */
   width?: 'default' | 'compact'
+  /** Replaces the Cancel/Confirm row, e.g. with an in-place progress bar. */
+  footer?: ReactNode
 }
 
 /**
@@ -62,6 +64,7 @@ export function AlertDialog({
   icon,
   onConfirm,
   width = 'default',
+  footer,
 }: AlertDialogProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
@@ -170,21 +173,23 @@ export function AlertDialog({
 
       {/* Actions on one row (Cancel left, the action right) at every width; on
           phones they split the bar evenly instead of stacking. */}
-      <div className="flex items-center gap-2 border-t border-line bg-canvas/60 px-5 py-3.5 [&>*]:flex-1 sm:justify-end sm:[&>*]:flex-none">
-        {cancelLabel !== null && (
-          <Button ref={cancelRef} variant="secondary" onClick={dismiss} disabled={pending}>
-            {cancelLabel}
+      {footer ?? (
+        <div className="flex items-center gap-2 border-t border-line bg-canvas/60 px-5 py-3.5 [&>*]:flex-1 sm:justify-end sm:[&>*]:flex-none">
+          {cancelLabel !== null && (
+            <Button ref={cancelRef} variant="secondary" onClick={dismiss} disabled={pending}>
+              {cancelLabel}
+            </Button>
+          )}
+          <Button
+            ref={confirmRef}
+            variant={tone === 'danger' ? 'danger' : 'primary'}
+            onClick={confirm}
+            loading={pending}
+          >
+            {pending ? (pendingLabel ?? confirmLabel) : confirmLabel}
           </Button>
-        )}
-        <Button
-          ref={confirmRef}
-          variant={tone === 'danger' ? 'danger' : 'primary'}
-          onClick={confirm}
-          loading={pending}
-        >
-          {pending ? (pendingLabel ?? confirmLabel) : confirmLabel}
-        </Button>
-      </div>
+        </div>
+      )}
     </dialog>
   )
 }

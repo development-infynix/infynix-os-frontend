@@ -152,7 +152,15 @@ export const renameClientImport = (id: string, name: string) =>
     body: JSON.stringify({ name }),
   })
 
+export const deleteImportClientChunk = (id: string, limit = 100) =>
+  api<{ deleted: number; remaining: number }>(`/client-imports/${id}/clients?limit=${limit}`, {
+    method: 'DELETE',
+  })
+
 export const deleteClientImport = (id: string) =>
   api<void>(`/client-imports/${id}`, { method: 'DELETE' })
 
 export const removeClient = (id: string) => api<void>(`/clients/${id}`, { method: 'DELETE' })
+
+export const removeClients = (ids: string[]) =>
+  api<{ deleted: number }>('/clients', { method: 'DELETE', body: JSON.stringify({ ids }) })

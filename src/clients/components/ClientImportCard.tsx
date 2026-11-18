@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { Check, X } from 'lucide-react'
 import { VscSettingsCompact } from 'react-icons/vsc'
 import { useEffect, useRef, useState } from 'react'
 import { AlertDialog } from '@/components/Alert'
@@ -9,6 +10,7 @@ import {
   CLIENTS_KEY,
   CLIENT_IMPORTS_KEY,
   deleteClientImport,
+  deleteImportClientChunk,
   renameClientImport,
   type ClientImport,
 } from '@/lib/clients'
@@ -35,6 +37,7 @@ export function ClientImportCard({
   const [nameError, setNameError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleteProgress, setDeleteProgress] = useState<{ current: number; total: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -77,10 +80,15 @@ export function ClientImportCard({
     }
   }
 
+  const chunkedDelete = item.createdCount > 100
+  const deletePercent = deleteProgress?.total
+    ? Math.round((deleteProgress.current / deleteProgress.total) * 100)
+    : 0
+
   return (
     <>
       <li className="relative overflow-hidden rounded-xl bg-surface shadow-lift">
-        <div className="border-b border-line bg-canvas/60 px-4 py-3 pr-12">
+        <div className={`border-b border-line bg-canvas/60 px-4 py-3 ${renaming ? '' : 'pr-12'}`}>
           {renaming ? (
             <form
               onSubmit={(event) => {
@@ -90,26 +98,33 @@ export function ClientImportCard({
               className="flex flex-col gap-2"
             >
               <FormError message={nameError} />
-              <input
-                autoFocus
-                aria-label="Import name"
-                className="field-input h-9"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-              <div className="flex justify-end gap-2">
-                <Button
+              <div className="flex items-center gap-2">
+                <input
+                  autoFocus
+                  aria-label="Import name"
+                  className="field-input h-9 min-w-0 flex-1"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                />
+                <button
+                  type="submit"
+                  aria-label="Save import name"
+                  title="Save"
+                  disabled={saving}
+                  className="btn btn-primary grid size-9 shrink-0 place-items-center p-0 disabled:opacity-50"
+                >
+                  <Check size={16} strokeWidth={2.2} aria-hidden />
+                </button>
+                <button
                   type="button"
-                  size="sm"
-                  variant="secondary"
+                  aria-label="Cancel rename"
+                  title="Cancel"
                   onClick={() => setRenaming(false)}
                   disabled={saving}
+                  className="btn btn-secondary grid size-9 shrink-0 place-items-center p-0"
                 >
-                  Cancel
-                </Button>
-                <Button type="submit" size="sm" variant="primary" loading={saving}>
-                  Save
-                </Button>
+                  <X size={16} strokeWidth={2} aria-hidden />
+                </button>
               </div>
             </form>
           ) : (
@@ -144,7 +159,8 @@ export function ClientImportCard({
           </div>
         </div>
 
-        <div ref={menuRef} className="absolute top-2.5 right-2.5">
+        {!renaming && (
+          <div ref={menuRef} className="absolute top-2.5 right-2.5">
           <button
             type="button"
             onClick={() => setMenuOpen((current) => !current)}
@@ -195,7 +211,8 @@ export function ClientImportCard({
               </button>
             </div>
           )}
-        </div>
+          </div>
+        )}
       </li>
 
       <AlertDialog
@@ -208,13 +225,52 @@ export function ClientImportCard({
         description={`This removes the import and its ${item.createdCount} clients. This can’t be undone.`}
         confirmLabel="Delete"
         pendingLabel="Deleting…"
+        footer={
+          chunkedDelete && deleteProgress ? (
+            <div className="border-t border-line bg-canvas/60 px-5 py-3.5">
+              <div className="mb-2 flex items-center justify-between text-caption text-ink-3">
+                <span>Deleting clients…</span>
+                <span className="tabular-nums">
+                  {deleteProgress.current} / {deleteProgress.total}
+                </span>
+              </div>
+              <div
+                role="progressbar"
+                aria-label="Delete progress"
+                aria-valuenow={deletePercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                className="h-2 overflow-hidden rounded-full bg-surface-hover"
+              >
+                <div
+                  className="h-full rounded-full bg-danger transition-[width] duration-200"
+                  style={{ width: `${deletePercent}%` }}
+                />
+              </div>
+            </div>
+          ) : undefined
+        }
         onConfirm={async () => {
-          await deleteClientImport(item.id)
-          await Promise.all([
-            queryClient.invalidateQueries({ queryKey: CLIENT_IMPORTS_KEY }),
-            queryClient.invalidateQueries({ queryKey: CLIENTS_KEY }),
-          ])
-          setConfirmDelete(false)
+          try {
+            if (chunkedDelete) {
+              let total = item.createdCount
+              setDeleteProgress({ current: 0, total })
+              while (true) {
+                const batch = await deleteImportClientChunk(item.id, 100)
+                total = batch.deleted + batch.remaining
+                setDeleteProgress({ current: total - batch.remaining, total })
+                if (batch.remaining === 0) break
+              }
+            }
+            await deleteClientImport(item.id)
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: CLIENT_IMPORTS_KEY }),
+              queryClient.invalidateQueries({ queryKey: CLIENTS_KEY }),
+            ])
+            setConfirmDelete(false)
+          } finally {
+            setDeleteProgress(null)
+          }
         }}
       />
     </>
