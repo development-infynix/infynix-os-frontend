@@ -4,6 +4,16 @@
 /* Every design value lives in tokens.css. Nothing below defines a raw value. */
 @import './styles/tokens.css';
 
+/* The wordmark face: Azonix ships a single regular weight, so it is declared
+   once with no bold variant — asking for 600 would make the browser fake one. */
+@font-face {
+  font-family: 'Azonix';
+  src: url('/Azonix.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* `dark:` follows the resolved theme on <html data-theme>, not only the OS. */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 

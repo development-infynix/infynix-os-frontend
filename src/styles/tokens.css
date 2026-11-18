@@ -124,9 +124,11 @@
 /* ── Tailwind utilities generated from the tokens ───────────────────────── */
 @theme inline {
   /* Type: Figtree, a compact working scale (rank by weight first, size second).
-     Caveat is the handwriting accent, used only for the OS in the wordmark. */
+     Caveat is the handwriting accent, used only for the OS in the wordmark.
+     Azonix is the wordmark face: the "Infynix" half only, one weight. */
   --font-sans: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
   --font-hand: 'Caveat Variable', 'Segoe Script', cursive;
+  --font-azonix: 'Azonix', 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
 
   --text-micro: 11px; /* role tags */
   --text-micro--line-height: 16px;

@@ -93,10 +93,10 @@ export function Sidebar({ onClose, collapsed = false, onToggleCollapse }: Sideba
         {!collapsed && (
           <div className="flex min-w-0 flex-1 items-center px-1.5">
             <p className="flex min-w-0 items-baseline gap-1.5">
-              <span className="truncate text-[20px] font-semibold uppercase leading-none tracking-[0.04em] text-ink">
+              <span className="truncate font-azonix text-[20px] font-normal uppercase leading-none tracking-[0.04em] text-ink">
                 Infynix
               </span>
-              <span className="font-hand text-[20px] leading-none text-secondary-text">OS</span>
+              <span className="font-hand text-[20px] font-semibold leading-none text-secondary-text">OS</span>
             </p>
           </div>
         )}
