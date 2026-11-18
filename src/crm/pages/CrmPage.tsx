@@ -133,11 +133,11 @@ export function CrmPage() {
 
   return (
     <>
-      <div className="grid min-h-[60dvh] w-full place-items-center px-5 text-center sm:hidden">
-        <div>
+      <div className="grid min-h-[70dvh] w-full place-items-center px-6 pt-8 text-center sm:hidden">
+        <div className="max-w-sm">
           <ComputerIllustration />
-          <h2 className="mt-6 text-title font-semibold text-ink">CRM isn’t available on mobile</h2>
-          <p className="mx-auto mt-2 max-w-[34ch] text-body text-ink-2">
+          <h2 className="mt-4 text-title font-semibold tracking-title text-ink">CRM isn’t available on mobile</h2>
+          <p className="mx-auto mt-1.5 max-w-[28ch] text-body text-ink-2">
             Switch to a desktop screen to manage your pipeline, deals and actions.
           </p>
         </div>
@@ -300,41 +300,64 @@ interface TabButtonProps {
 
 function ComputerIllustration() {
   return (
-    <svg viewBox="0 0 160 128" className="mx-auto h-28 w-36 text-secondary-text" fill="none" aria-hidden>
+    <svg viewBox="0 0 240 120" aria-hidden className="mx-auto block h-auto w-full max-w-[220px]" fill="none">
+      <defs>
+        <linearGradient id="crm-wallpaper" x1="44" y1="22" x2="196" y2="82" gradientUnits="userSpaceOnUse">
+          <stop stopColor="var(--canvas)" />
+          <stop offset="1" stopColor="var(--secondary-soft)" stopOpacity="0.55" />
+        </linearGradient>
+        <clipPath id="crm-screen">
+          <rect x="44" y="22" width="152" height="60" rx="4" />
+        </clipPath>
+      </defs>
       <rect
-        x="18"
+        x="34"
         y="12"
-        width="124"
-        height="82"
-        rx="8"
+        width="172"
+        height="84"
+        rx="10"
         fill="var(--surface)"
-        stroke="currentColor"
-        strokeWidth="3"
+        stroke="var(--line-strong)"
+        strokeWidth="1.5"
       />
       <rect
-        x="28"
+        x="44"
         y="22"
-        width="104"
-        height="62"
-        rx="3"
-        fill="var(--canvas)"
-        stroke="currentColor"
-        strokeWidth="2"
+        width="152"
+        height="60"
+        rx="4"
+        fill="url(#crm-wallpaper)"
+        stroke="var(--line)"
+        strokeWidth="1.5"
       />
-      <path
-        d="M8 104h144l-10 12H18z"
+      <g clipPath="url(#crm-screen)">
+        <path
+          d="M44 70c26-18 48-22 72-8s44 12 80-6v26H44z"
+          fill="var(--secondary-soft)"
+          opacity="0.55"
+        />
+        <path
+          d="M44 76c26-14 50-16 76-4s42 10 76-4"
+          stroke="var(--line)"
+          strokeWidth="1.5"
+          opacity="0.8"
+        />
+      </g>
+      <rect
+        x="104"
+        y="96"
+        width="32"
+        height="8"
         fill="var(--surface)"
-        stroke="currentColor"
-        strokeWidth="3"
-        strokeLinejoin="round"
+        stroke="var(--line-strong)"
+        strokeWidth="1.5"
       />
-      <rect x="62" y="94" width="36" height="10" fill="var(--surface)" stroke="currentColor" strokeWidth="3" />
       <path
-        d="M46 42h52M46 54h36M46 66h44"
-        stroke="currentColor"
-        strokeWidth="3"
-        strokeLinecap="round"
-        opacity="0.5"
+        d="M72 104h96l8 10H64z"
+        fill="var(--surface)"
+        stroke="var(--line-strong)"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
       />
     </svg>
   )
