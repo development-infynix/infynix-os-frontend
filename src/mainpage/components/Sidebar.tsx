@@ -96,7 +96,7 @@ export function Sidebar({ onClose, collapsed = false, onToggleCollapse }: Sideba
               <span className="truncate font-azonix text-[20px] font-normal uppercase leading-none tracking-[0.04em] text-ink">
                 Infynix
               </span>
-              <span className="wordmark-os font-candy-cane text-[22px] font-normal leading-none text-secondary-text">OS</span>
+              <span className="wordmark-os font-candy-cane text-[26px] font-normal leading-none text-secondary-text">OS</span>
             </p>
           </div>
         )}
