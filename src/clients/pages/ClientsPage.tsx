@@ -84,6 +84,12 @@ export function ClientsPage() {
   const busy = isFetching && isPlaceholderData
   /** Nothing to list: the panel drops its table surface and shows the illustration. */
   const panelIsEmpty = !isPending && !busy && !isError && data?.total === 0
+  /**
+   * Nothing to search or filter yet, so those two buttons stay hidden in the
+   * empty state; Add is still there, and the drawing opens it too. An active
+   * search or import filter keeps them, or the empty list would be a dead end.
+   */
+  const showListTools = !panelIsEmpty || Boolean(q) || Boolean(importFilter)
 
   const goTo = (next: number) => void navigate({ search: { page: next, q, importId: importFilter ?? undefined } })
   const changeImportFilter = (value: string | null) =>
@@ -160,7 +166,7 @@ export function ClientsPage() {
                 <Trash2 size={16} strokeWidth={2} className="shrink-0" aria-hidden />
                 <span className="hidden sm:inline">Delete {selected.size}</span>
               </Button>
-            ) : (
+            ) : showListTools ? (
               <>
                 <Button
                   variant="secondary"
@@ -174,7 +180,7 @@ export function ClientsPage() {
                 </Button>
                 <ImportFilterMenu value={importFilter} onChange={changeImportFilter} />
               </>
-            ))}
+            ) : null)}
           <AddClientMenu
             onForm={() => setAdding(true)}
             onImport={() => setImporting(true)}
