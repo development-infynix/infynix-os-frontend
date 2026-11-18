@@ -125,10 +125,12 @@
 @theme inline {
   /* Type: Figtree, a compact working scale (rank by weight first, size second).
      Caveat is the handwriting accent, used only for the OS in the wordmark.
-     Azonix is the wordmark face: the "Infynix" half only, one weight. */
+     Azonix is the wordmark face: the "Infynix" half only, one weight.
+     Candy Cane is the "OS" half, one weight. */
   --font-sans: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
   --font-hand: 'Caveat Variable', 'Segoe Script', cursive;
   --font-azonix: 'Azonix', 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-candy-cane: 'Candy Cane', 'Caveat Variable', cursive;
 
   --text-micro: 11px; /* role tags */
   --text-micro--line-height: 16px;
