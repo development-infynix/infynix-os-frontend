@@ -132,8 +132,19 @@ export function CrmPage() {
   }
 
   return (
-    <div className="flex w-full flex-col px-5 pb-24 sm:min-h-0 sm:flex-1 sm:px-10 sm:py-10">
-      <h1 className="sr-only">CRM</h1>
+    <>
+      <div className="grid min-h-[60dvh] w-full place-items-center px-5 text-center sm:hidden">
+        <div>
+          <ComputerIllustration />
+          <h2 className="mt-6 text-title font-semibold text-ink">CRM isn’t available on mobile</h2>
+          <p className="mx-auto mt-2 max-w-[34ch] text-body text-ink-2">
+            Switch to a desktop screen to manage your pipeline, deals and actions.
+          </p>
+        </div>
+      </div>
+
+      <div className="hidden w-full flex-col px-5 pb-24 sm:flex sm:min-h-0 sm:flex-1 sm:px-10 sm:py-10">
+        <h1 className="sr-only">CRM</h1>
 
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-3 pt-4 sm:pt-0">
         <div
@@ -274,7 +285,8 @@ export function CrmPage() {
         stageName={firstStage?.name ?? 'the first stage'}
         onAdd={addDeal}
       />
-    </div>
+      </div>
+    </>
   )
 }
 
@@ -284,6 +296,48 @@ interface TabButtonProps {
   selected: boolean
   onSelect: () => void
   children: ReactNode
+}
+
+function ComputerIllustration() {
+  return (
+    <svg viewBox="0 0 160 128" className="mx-auto h-28 w-36 text-secondary-text" fill="none" aria-hidden>
+      <rect
+        x="18"
+        y="12"
+        width="124"
+        height="82"
+        rx="8"
+        fill="var(--surface)"
+        stroke="currentColor"
+        strokeWidth="3"
+      />
+      <rect
+        x="28"
+        y="22"
+        width="104"
+        height="62"
+        rx="3"
+        fill="var(--canvas)"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      <path
+        d="M8 104h144l-10 12H18z"
+        fill="var(--surface)"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinejoin="round"
+      />
+      <rect x="62" y="94" width="36" height="10" fill="var(--surface)" stroke="currentColor" strokeWidth="3" />
+      <path
+        d="M46 42h52M46 54h36M46 66h44"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        opacity="0.5"
+      />
+    </svg>
+  )
 }
 
 function TabButton({ id, controls, selected, onSelect, children }: TabButtonProps) {
