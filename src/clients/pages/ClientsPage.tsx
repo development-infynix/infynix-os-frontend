@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronDown, Contact, FileSpreadsheet, Filter, Pencil, Search, Trash2, UserPlus } from 'lucide-react'
+import { MdKeyboardDoubleArrowRight } from 'react-icons/md'
 import { getRouteApi } from '@tanstack/react-router'
 import {
   useEffect,
@@ -181,10 +182,25 @@ export function ClientsPage() {
                 <ImportFilterMenu value={importFilter} onChange={changeImportFilter} />
               </>
             ) : null)}
-          <AddClientMenu
-            onForm={() => setAdding(true)}
-            onImport={() => setImporting(true)}
-          />
+          {tab === 'clients' && selected.size > 0 ? (
+            <Button
+              type="button"
+              variant="primary"
+              aria-label="Move selected clients to CRM"
+              title="CRM"
+              className="flex shrink-0 items-center whitespace-nowrap px-3.5!"
+            >
+              <span className="flex items-center gap-1 leading-none">
+                CRM
+                <MdKeyboardDoubleArrowRight className="hidden text-[1.15em] sm:block" aria-hidden />
+              </span>
+            </Button>
+          ) : (
+            <AddClientMenu
+              onForm={() => setAdding(true)}
+              onImport={() => setImporting(true)}
+            />
+          )}
         </div>
       </div>
 
