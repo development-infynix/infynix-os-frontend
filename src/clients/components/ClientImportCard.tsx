@@ -1,0 +1,222 @@
+import { useQueryClient } from '@tanstack/react-query'
+import { VscSettingsCompact } from 'react-icons/vsc'
+import { useEffect, useRef, useState } from 'react'
+import { AlertDialog } from '@/components/Alert'
+import { Button } from '@/components/Button'
+import { FormError } from '@/components/FormField'
+import { ApiError } from '@/lib/api'
+import {
+  CLIENTS_KEY,
+  CLIENT_IMPORTS_KEY,
+  deleteClientImport,
+  renameClientImport,
+  type ClientImport,
+} from '@/lib/clients'
+
+const dateFormat = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+/** "16 Nov 2026" in the viewer's locale. */
+const importedOn = (iso: string) => dateFormat.format(new Date(iso))
+
+const failure = (error: unknown, fallback: string) =>
+  error instanceof ApiError && error.status !== 500 ? error.message : fallback
+
+/** One import batch: summary counts and a menu to rename, delete or move it. */
+export function ClientImportCard({
+  item,
+  onViewRows,
+}: {
+  item: ClientImport
+  onViewRows: (item: ClientImport) => void
+}) {
+  const queryClient = useQueryClient()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [name, setName] = useState(item.name)
+  const [nameError, setNameError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [menuOpen])
+
+  function startRename() {
+    setName(item.name)
+    setNameError(null)
+    setRenaming(true)
+  }
+
+  async function saveRename() {
+    if (!name.trim()) {
+      setNameError('Enter an import name')
+      return
+    }
+    setSaving(true)
+    setNameError(null)
+    try {
+      await renameClientImport(item.id, name.trim())
+      await queryClient.invalidateQueries({ queryKey: CLIENT_IMPORTS_KEY })
+      setRenaming(false)
+    } catch (error) {
+      setNameError(failure(error, 'Couldn’t rename the import. Try again.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <>
+      <li className="relative overflow-hidden rounded-xl bg-surface shadow-lift">
+        <div className="border-b border-line bg-canvas/60 px-4 py-3 pr-12">
+          {renaming ? (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                void saveRename()
+              }}
+              className="flex flex-col gap-2"
+            >
+              <FormError message={nameError} />
+              <input
+                autoFocus
+                aria-label="Import name"
+                className="field-input h-9"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setRenaming(false)}
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" variant="primary" loading={saving}>
+                  Save
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <p className="truncate text-title font-semibold text-ink">{item.name}</p>
+              <p className="mt-0.5 truncate text-caption text-ink-3" title={item.fileName}>
+                {item.fileName}
+              </p>
+            </>
+          )}
+        </div>
+        <div className="px-4 py-3.5">
+          <dl className="grid grid-cols-3 gap-2">
+            <div>
+              <dt className="text-caption text-ink-3">Rows</dt>
+              <dd className="text-body font-medium text-ink tabular-nums">{item.rowCount}</dd>
+            </div>
+            <div>
+              <dt className="text-caption text-ink-3">Added</dt>
+              <dd className="text-body font-medium text-ink tabular-nums">{item.createdCount}</dd>
+            </div>
+            <div>
+              <dt className="text-caption text-ink-3">Skipped</dt>
+              <dd className="text-body font-medium text-ink tabular-nums">{item.skippedCount}</dd>
+            </div>
+          </dl>
+          <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3">
+            <span className="text-caption text-ink-3 tabular-nums">{importedOn(item.createdAt)}</span>
+            <Button size="sm" variant="secondary" onClick={() => onViewRows(item)}>
+              View rows
+            </Button>
+          </div>
+        </div>
+
+        <div ref={menuRef} className="absolute top-2.5 right-2.5">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((current) => !current)}
+            aria-label={`Settings for ${item.name}`}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            className="grid size-8 place-items-center rounded-md text-ink-3 hover:bg-surface-hover hover:text-ink"
+          >
+            <VscSettingsCompact size={17} />
+          </button>
+          {menuOpen && (
+            <div
+              role="menu"
+              aria-label={`${item.name} actions`}
+              className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-lg bg-surface py-1 shadow-dialog"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false)
+                  startRename()
+                }}
+                className="flex w-full px-3 py-2 text-left text-body text-ink-2 hover:bg-surface-hover hover:text-ink"
+              >
+                Rename
+              </button>
+              <div className="my-1 border-t border-line" />
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false)
+                  setConfirmDelete(true)
+                }}
+                className="flex w-full px-3 py-2 text-left text-body text-danger hover:bg-surface-hover"
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled
+                title="Coming soon"
+                className="flex w-full cursor-not-allowed px-3 py-2 text-left text-body text-ink-3 opacity-50"
+              >
+                Move to CRM
+              </button>
+            </div>
+          )}
+        </div>
+      </li>
+
+      <AlertDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        tone="danger"
+        icon={null}
+        width="compact"
+        title={`Delete ${item.name}?`}
+        description="The import record is removed. Its clients stay in the directory."
+        confirmLabel="Delete"
+        pendingLabel="Deleting…"
+        onConfirm={async () => {
+          await deleteClientImport(item.id)
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: CLIENT_IMPORTS_KEY }),
+            queryClient.invalidateQueries({ queryKey: CLIENTS_KEY }),
+          ])
+          setConfirmDelete(false)
+        }}
+      />
+    </>
+  )
+}

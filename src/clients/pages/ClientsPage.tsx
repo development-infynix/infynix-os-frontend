@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { Check, ChevronDown, Contact, FileSpreadsheet, Filter, Pencil, Search, UserPlus } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Check, ChevronDown, Contact, FileSpreadsheet, Filter, Pencil, Search, Trash2, UserPlus } from 'lucide-react'
 import { getRouteApi } from '@tanstack/react-router'
 import {
   useEffect,
@@ -9,14 +9,17 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react'
+import { AlertDialog } from '@/components/Alert'
 import { Button } from '@/components/Button'
 import { Loader } from '@/components/Loader'
 import { Pagination } from '@/components/Pagination'
 import {
+  CLIENTS_KEY,
   clientImportsQuery,
   clientQuery,
   clientsPageQuery,
   hasContact,
+  removeClient,
   type Client,
 } from '@/lib/clients'
 import { AddClientDialog } from '../components/AddClientDialog'
@@ -39,7 +42,9 @@ export function ClientsPage() {
   const q = route.useSearch({ select: (s) => s.q ?? '' })
   const importFilter = route.useSearch({ select: (s) => s.importId ?? null })
   const navigate = route.useNavigate()
+  const queryClient = useQueryClient()
   const [tab, setTab] = useState<Tab>('clients')
+  const [deleting, setDeleting] = useState<Client | null>(null)
   const tabsId = useId()
   const clientsTabId = `${tabsId}-clients-tab`
   const importsTabId = `${tabsId}-imports-tab`
@@ -183,16 +188,18 @@ export function ClientsPage() {
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-line pt-3 text-label text-ink-2">
                       <span className="text-caption text-ink-3 tabular-nums">Added {addedOn(client.createdAt)}</span>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => viewClient(client)}
-                        aria-haspopup="dialog"
-                        aria-label={`View ${client.name}`}
-                        className="ml-auto"
-                      >
-                        View
-                      </Button>
+                      <div className="ml-auto flex items-center gap-2">
+                        <DeleteClientButton client={client} onDelete={setDeleting} />
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => viewClient(client)}
+                          aria-haspopup="dialog"
+                          aria-label={`View ${client.name}`}
+                        >
+                          View
+                        </Button>
+                      </div>
                     </div>
                   </li>
                 ))}
@@ -241,15 +248,18 @@ export function ClientsPage() {
                           {addedOn(client.createdAt)}
                         </td>
                         <td className="px-4 py-3 text-right whitespace-nowrap">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => viewClient(client)}
-                            aria-haspopup="dialog"
-                            aria-label={`View ${client.name}`}
-                          >
-                            View
-                          </Button>
+                          <div className="flex items-center justify-end gap-2">
+                            <DeleteClientButton client={client} onDelete={setDeleting} />
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => viewClient(client)}
+                              aria-haspopup="dialog"
+                              aria-label={`View ${client.name}`}
+                            >
+                              View
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -290,6 +300,23 @@ export function ClientsPage() {
       <ClientImportModal open={importing} onOpenChange={setImporting} />
       <SearchClientsDialog open={searching} onOpenChange={setSearching} onSelect={viewClient} />
       <ClientDetailsDrawer key={viewing?.id ?? 'closed'} client={viewing} onClose={() => setPicked(null)} />
+      <AlertDialog
+        open={!!deleting}
+        onOpenChange={(open) => !open && setDeleting(null)}
+        tone="danger"
+        icon={null}
+        width="compact"
+        title={`Delete ${deleting?.name ?? 'this client'}?`}
+        description="This removes the client from the directory. This can’t be undone."
+        confirmLabel="Delete"
+        pendingLabel="Deleting…"
+        onConfirm={async () => {
+          if (!deleting) return
+          await removeClient(deleting.id)
+          await queryClient.invalidateQueries({ queryKey: CLIENTS_KEY })
+          setDeleting(null)
+        }}
+      />
     </div>
   )
 }
@@ -391,6 +418,22 @@ function ImportFilterMenu({
         </ul>
       )}
     </div>
+  )
+}
+
+/** Icon-only delete action used in both the table and the mobile cards. */
+function DeleteClientButton({ client, onDelete }: { client: Client; onDelete: (client: Client) => void }) {
+  return (
+    <Button
+      size="sm"
+      variant="secondary"
+      onClick={() => onDelete(client)}
+      aria-label={`Delete ${client.name}`}
+      title="Delete client"
+      className="w-8 px-0! text-danger"
+    >
+      <Trash2 size={15} strokeWidth={2} aria-hidden />
+    </Button>
   )
 }
 

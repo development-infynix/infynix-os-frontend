@@ -126,7 +126,7 @@ export function ClientImportModal({
       setFile(parsed)
       setMapping(guessMapping(parsed.headers))
       setCustomFields([])
-      setImportName(selected.name.replace(/\.[^.]+$/, ''))
+      setImportName('')
       setError(null)
       setStep(2)
     } catch {
@@ -335,7 +335,7 @@ export function ClientImportModal({
             ) : (
               <div>
                 <div className="mb-4">
-                  <FormField label="Import name" htmlFor="import-job-name" hint="A name to find this import later.">
+                  <FormField label="Import name *" htmlFor="import-job-name" hint="Required. A name to find this import later.">
                     <input
                       id="import-job-name"
                       type="text"

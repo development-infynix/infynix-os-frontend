@@ -146,4 +146,13 @@ export const importClientsChunk = (importId: string, clients: ClientInput[]) =>
     body: JSON.stringify({ importId, clients }),
   })
 
+export const renameClientImport = (id: string, name: string) =>
+  api<ClientImport>(`/client-imports/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  })
+
+export const deleteClientImport = (id: string) =>
+  api<void>(`/client-imports/${id}`, { method: 'DELETE' })
+
 export const removeClient = (id: string) => api<void>(`/clients/${id}`, { method: 'DELETE' })
