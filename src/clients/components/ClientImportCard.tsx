@@ -205,7 +205,7 @@ export function ClientImportCard({
         icon={null}
         width="compact"
         title={`Delete ${item.name}?`}
-        description="The import record is removed. Its clients stay in the directory."
+        description={`This removes the import and its ${item.createdCount} clients. This can’t be undone.`}
         confirmLabel="Delete"
         pendingLabel="Deleting…"
         onConfirm={async () => {

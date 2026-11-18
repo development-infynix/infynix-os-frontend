@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Eye, EyeOff, Pencil, ShieldCheck, Trash2, UserCheck, UserX, X } from 'lucide-react'
+import { Eye, EyeOff, Pencil, Trash2, UserCheck, UserX, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { AlertDialog } from '@/components/Alert'
 import { Button } from '@/components/Button'
@@ -364,9 +364,10 @@ function RoleTag({ role }: { role: MemberRole }) {
 }
 
 /**
- * The Permissions tab. Owners hold every menu implicitly; for managers and
- * staff each press of Save replaces the whole set. Save is pinned in the
- * footer, where the other drawer views keep their actions.
+ * The Permissions tab. Owners hold every menu implicitly, so their view is a
+ * full-panel statement of that rather than a list of permissions they can't
+ * change; for managers and staff each press of Save replaces the whole set.
+ * Save is pinned in the footer, where the other drawer views keep their actions.
  */
 function PermissionsPanel({
   member,
@@ -376,28 +377,13 @@ function PermissionsPanel({
   onBusyChange: (busy: boolean) => void
 }) {
   const isOwner = member.role === 'owner'
+  // Owners hold everything by role, so there is nothing to fetch for them.
   const { data, isPending, isError, refetch } = useQuery({
     ...memberAccessQuery(member.id),
     enabled: !isOwner,
   })
 
-  if (isOwner) {
-    return (
-      <>
-        <div className="flex-1 overflow-y-auto bg-canvas px-4 py-4">
-          <section className="overflow-hidden rounded-xl bg-surface shadow-lift">
-            <p className="flex items-start gap-2.5 px-3.5 py-3 text-body text-ink-2">
-              <ShieldCheck size={16} strokeWidth={1.9} className="mt-0.5 shrink-0 text-secondary-text" aria-hidden />
-              Owners can open every menu. Grant menus to managers and staff from here.
-            </p>
-          </section>
-        </div>
-        <div className="border-t border-line bg-canvas/60 px-5 py-3.5">
-          <p className="text-caption text-ink-3">Owners have access to every menu.</p>
-        </div>
-      </>
-    )
-  }
+  if (isOwner) return <OwnerAccessPanel />
 
   if (isPending) {
     return (
@@ -433,6 +419,84 @@ function PermissionsPanel({
   }
 
   return <AccessEditor member={member} data={data} onBusyChange={onBusyChange} />
+}
+
+/**
+ * An owner's Permissions tab: the whole menu set, held by role. No checklist —
+ * there is nothing to choose — just the illustration, the reason, and a footer
+ * note in place of a Save button that could never enable.
+ */
+function OwnerAccessPanel() {
+  return (
+    <>
+      <div className="grid flex-1 place-items-center overflow-y-auto bg-canvas px-6 py-10 text-center">
+        <div>
+          <OwnerAccessIllustration />
+          <p className="mt-5 text-title font-semibold text-ink">Every menu, always on</p>
+          <p className="mx-auto mt-1.5 max-w-[36ch] text-body text-ink-2">
+            Owners hold the whole menu set, so there is nothing to grant here. Open a manager or a
+            staff member to choose theirs.
+          </p>
+        </div>
+      </div>
+      <div className="border-t border-line bg-canvas/60 px-5 py-3.5">
+        <p className="text-caption text-ink-3">
+          Owner access covers every menu and can’t be changed.
+        </p>
+      </div>
+    </>
+  )
+}
+
+/**
+ * "Every menu unlocked": a shield on a dashed ring of granted menus. Drawn with
+ * the theme tokens so it follows light and dark without a second asset.
+ */
+function OwnerAccessIllustration() {
+  const cx = 120
+  const cy = 50
+  const ring = 40
+  const dots = Array.from({ length: 8 }, (_, index) => {
+    const angle = (index * Math.PI) / 4
+    return { x: cx + Math.cos(angle) * ring, y: cy + Math.sin(angle) * ring }
+  })
+
+  return (
+    <svg
+      viewBox="0 0 240 100"
+      aria-hidden
+      className="mx-auto block h-auto w-full max-w-[240px]"
+      fill="none"
+    >
+      <circle cx={cx} cy={cy} r="34" fill="var(--secondary-soft)" />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={ring}
+        stroke="var(--line-strong)"
+        strokeWidth="1.5"
+        strokeDasharray="3 5"
+        strokeLinecap="round"
+      />
+      {dots.map((dot) => (
+        <circle key={`${dot.x}-${dot.y}`} cx={dot.x} cy={dot.y} r="2.6" fill="var(--secondary-text)" opacity="0.55" />
+      ))}
+      <path
+        d="M120 24l22 8v18c0 13-9 24-22 28-13-4-22-15-22-28V32l22-8z"
+        fill="var(--surface)"
+        stroke="var(--secondary)"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M110 50l7 7 14-15"
+        stroke="var(--secondary)"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
 }
 
 /**
