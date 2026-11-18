@@ -28,6 +28,7 @@ import { AddClientDialog } from '../components/AddClientDialog'
 import { ClientImportModal } from '../components/ClientImportModal'
 import { ClientImportsPanel } from '../components/ClientImportsPanel'
 import { ClientDetailsDrawer } from '../components/ClientDetailsDrawer'
+import { ClientsEmpty } from '../components/ClientsEmpty'
 import { SearchClientsDialog } from '../components/SearchClientsDialog'
 
 const dateFormat = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
@@ -81,6 +82,8 @@ export function ClientsPage() {
     enabled: tab === 'clients',
   })
   const busy = isFetching && isPlaceholderData
+  /** Nothing to list: the panel drops its table surface and shows the illustration. */
+  const panelIsEmpty = !isPending && !busy && !isError && data?.total === 0
 
   const goTo = (next: number) => void navigate({ search: { page: next, q, importId: importFilter ?? undefined } })
   const changeImportFilter = (value: string | null) =>
@@ -184,7 +187,14 @@ export function ClientsPage() {
           id={clientsPanelId}
           role="tabpanel"
           aria-labelledby={clientsTabId}
-          className="mt-4 flex min-h-[70vh] flex-col sm:min-h-72 sm:flex-1 sm:overflow-hidden sm:rounded-xl sm:bg-surface sm:shadow-lift"
+          /* The surface, rounding and shadow belong to the table. With nothing
+             to list they come off, so the empty state sits on the canvas
+             instead of inside a container pretending to be a table. */
+          className={`mt-4 flex flex-col sm:min-h-72 sm:flex-1 ${
+            panelIsEmpty
+              ? 'min-h-[60vh]'
+              : 'min-h-[70vh] sm:overflow-hidden sm:rounded-xl sm:bg-surface sm:shadow-lift'
+          }`}
         >
           {/* Phones: one card per client. Tablet and up: one panel holding the table. */}
           {/* Tablet and up: the panel takes all the height left, so only the table scrolls. */}
@@ -201,6 +211,19 @@ export function ClientsPage() {
                 </Button>
               </div>
             </div>
+          ) : data.total === 0 ? (
+            /* Nothing to list: no table headers, no empty rows, no pagination. */
+            <ClientsEmpty
+              onAdd={() => setAdding(true)}
+              title={importFilter ? 'Nothing in this import' : q ? 'No clients match' : undefined}
+              description={
+                importFilter
+                  ? 'No clients came from this import. Clear the filter to see your whole directory.'
+                  : q
+                    ? 'No client matches that search. Try another name, email or phone number.'
+                    : undefined
+              }
+            />
           ) : (
             <>
               <ul
@@ -316,11 +339,6 @@ export function ClientsPage() {
                   </tbody>
                 </table>
               </div>
-              {data.total === 0 && (
-                <div className="px-4 py-6 text-center text-label text-ink-3">
-                  No clients yet. Add your first client to start your directory.
-                </div>
-              )}
               {/* Footer: pinned to the bottom of the panel; the rows above it scroll. */}
               <Pagination
                 page={data.page}
@@ -336,8 +354,16 @@ export function ClientsPage() {
           )}
         </div>
       ) : (
-        <div id={importsPanelId} role="tabpanel" aria-labelledby={importsTabId}>
+        <div
+          id={importsPanelId}
+          role="tabpanel"
+          aria-labelledby={importsTabId}
+          /* Same height as the clients panel, so both empty states sit at the
+             same place instead of one floating up under the tabs. */
+          className="mt-4 flex min-h-[60vh] flex-col sm:min-h-72 sm:flex-1"
+        >
           <ClientImportsPanel
+            onImport={() => setImporting(true)}
             onViewRows={(item) => {
               changeImportFilter(item.id)
               setTab('clients')
