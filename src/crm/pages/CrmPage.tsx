@@ -363,6 +363,8 @@ export function CrmPage() {
                     {moveError}
                   </div>
                 )}
+                {/* The board slot: takes the height left and gives the board a fixed box to fill. */}
+                <div className="relative sm:min-h-0 sm:flex-1">
                 <KanbanBoard
                   ref={board}
                   stages={stages}
@@ -377,6 +379,7 @@ export function CrmPage() {
                   highlightedId={highlightedId}
                   onScrollStateChange={setScroll}
                 />
+                </div>
               </>
             )}
           </div>

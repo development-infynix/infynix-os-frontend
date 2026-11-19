@@ -47,7 +47,7 @@ export const KanbanColumn = memo(function KanbanColumn({
     <section
       aria-labelledby={headingId}
       data-stage-column
-      className="flex w-[18.5rem] shrink-0 snap-start flex-col gap-3 sm:min-h-0 sm:w-[19.5rem]"
+      className="flex w-[18.5rem] shrink-0 snap-start flex-col gap-3 sm:h-full sm:min-h-0 sm:w-[19.5rem]"
     >
       <header className="rounded-xl bg-surface px-4 pt-3.5 pb-4 shadow-lift">
         <div className="flex items-center gap-2.5">

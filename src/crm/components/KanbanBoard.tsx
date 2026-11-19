@@ -294,7 +294,9 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
         ref={scroller}
         role="region"
         aria-label="Pipeline board"
-        className="-mx-5 flex gap-4 overflow-x-auto px-5 pb-3 [scrollbar-width:thin] max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-px-5 sm:-mx-10 sm:min-h-0 sm:flex-1 sm:px-10"
+        // Tablet and up: pinned to the edges of the page's board slot (see CrmPage), so its height is fixed and
+        // every column scrolls its own cards instead of growing the page. Edge to edge: -10 on the sides, padded back.
+        className="-mx-5 flex gap-4 overflow-x-auto px-5 pb-3 [scrollbar-width:thin] max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-px-5 sm:absolute sm:inset-y-0 sm:-right-10 sm:-left-10 sm:mx-0 sm:px-10"
       >
         {stages.map((stage, index) => (
           <KanbanColumn
