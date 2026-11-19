@@ -1,4 +1,4 @@
-import { keepPreviousData, queryOptions } from '@tanstack/react-query'
+import { infiniteQueryOptions, keepPreviousData, queryOptions } from '@tanstack/react-query'
 import { api } from './api'
 
 export interface Client {
@@ -164,3 +164,60 @@ export const removeClient = (id: string) => api<void>(`/clients/${id}`, { method
 
 export const removeClients = (ids: string[]) =>
   api<{ deleted: number }>('/clients', { method: 'DELETE', body: JSON.stringify({ ids }) })
+
+/** The bulk-delete endpoint takes at most 500 ids, so larger selections go in chunks. */
+const DELETE_CHUNK = 500
+
+/** Deletes any number of clients, one request per 500, one after another. */
+export async function removeClientsInChunks(ids: string[]): Promise<number> {
+  let deleted = 0
+  for (let index = 0; index < ids.length; index += DELETE_CHUNK) {
+    deleted += (await removeClients(ids.slice(index, index + DELETE_CHUNK))).deleted
+  }
+  return deleted
+}
+
+/** Every client id from one import, for "Select imports" (cached briefly; imports rarely change). */
+export const clientImportIdsQuery = (importId: string) =>
+  queryOptions({
+    queryKey: [...CLIENTS_KEY, 'import-ids', importId],
+    queryFn: () =>
+      api<{ ids: string[] }>(`/clients/ids?${new URLSearchParams({ importId }).toString()}`).then(
+        (result) => result.ids,
+      ),
+    staleTime: 30_000,
+  })
+
+export interface ClientImportsSearchPage {
+  items: ClientImport[]
+  total: number
+  page: number
+  pageSize: number
+  hasMore: boolean
+}
+
+export const IMPORTS_SEARCH_PAGE_SIZE = 20
+
+/**
+ * Imports that still have clients, searched and paged on the server ("Load
+ * more"). `session` is part of the key so each opening of the list starts a
+ * fresh fetch from page 1; nothing is kept once it closes (gcTime 0).
+ */
+export const clientImportsSearchQuery = (q: string, session: number) =>
+  infiniteQueryOptions({
+    queryKey: [...CLIENT_IMPORTS_KEY, 'search', q, session],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({
+        page: String(pageParam),
+        pageSize: String(IMPORTS_SEARCH_PAGE_SIZE),
+        withClients: 'true',
+      })
+      if (q) params.set('q', q)
+      return api<ClientImportsSearchPage>(`/client-imports/search?${params.toString()}`)
+    },
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.hasMore ? last.page + 1 : undefined),
+    staleTime: 0,
+    gcTime: 0,
+    placeholderData: keepPreviousData,
+  })

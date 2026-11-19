@@ -111,3 +111,18 @@ export const crmPipelineDeleteImpactQuery = (id: string) =>
 
 /** Deletes the pipeline with its deals, stages and access list. Clients stay. */
 export const deleteCrmPipeline = (id: string) => api<void>(`/crm/pipelines/${id}`, { method: 'DELETE' })
+
+/** Most clients one bulk-add request takes; the Clients page sends larger selections in chunks. */
+export const CRM_BULK_CHUNK = 100
+
+export interface AddCrmDealsResult {
+  added: number
+  /** Already had a deal in that pipeline: skipped, not an error. */
+  alreadyInPipeline: number
+  /** No longer a client of the company (deleted meanwhile). */
+  notFound: number
+}
+
+/** Adds existing clients (up to CRM_BULK_CHUNK) as deals in one stage of a pipeline. */
+export const addCrmDeals = (input: { pipelineId: string; stageId?: string; clientIds: string[] }) =>
+  api<AddCrmDealsResult>('/crm/deals/bulk', { method: 'POST', body: JSON.stringify(input) })

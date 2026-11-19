@@ -22,10 +22,14 @@ import {
   clientsPageQuery,
   hasContact,
   removeClient,
-  removeClients,
+  removeClientsInChunks,
   type Client,
 } from '@/lib/clients'
+import { hasAccess } from '@/lib/access'
+import { useSession } from '@/lib/auth'
 import { AddClientDialog } from '../components/AddClientDialog'
+import { ClientCrmModal } from '../components/ClientCrmModal'
+import { ClientSelectionMenu } from '../components/ClientSelectionMenu'
 import { ClientImportModal } from '../components/ClientImportModal'
 import { ClientImportsPanel } from '../components/ClientImportsPanel'
 import { ClientDetailsDrawer } from '../components/ClientDetailsDrawer'
@@ -54,6 +58,9 @@ export function ClientsPage() {
   const [deleting, setDeleting] = useState<Client | null>(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  /** The CRM button needs the CRM menu: the modal lists that person's pipelines. */
+  const canUseCrm = hasAccess(useSession(), 'crm')
+  const [addingToCrm, setAddingToCrm] = useState(false)
 
   useEffect(() => {
     localStorage.setItem(TAB_STORAGE_KEY, tab)
@@ -155,51 +162,59 @@ export function ClientsPage() {
           </TabButton>
         </div>
         <div className="flex items-center gap-2">
-          {tab === 'clients' &&
-            (selected.size > 0 ? (
+          {tab === 'clients' && selected.size > 0 ? (
+            /* With a selection: Select (N) ▾, then CRM, then Delete. */
+            <>
+              <ClientSelectionMenu
+                selected={selected}
+                onChange={setSelected}
+                pageIds={data?.items.map((client) => client.id) ?? []}
+              />
+              {canUseCrm && (
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => setAddingToCrm(true)}
+                  aria-haspopup="dialog"
+                  aria-label={`Add ${selected.size} selected ${selected.size === 1 ? 'client' : 'clients'} to a CRM pipeline`}
+                  title="CRM"
+                  className="flex shrink-0 items-center whitespace-nowrap px-3.5!"
+                >
+                  <span className="flex items-center gap-1 leading-none">
+                    CRM
+                    <MdKeyboardDoubleArrowRight className="hidden text-[1.15em] sm:block" aria-hidden />
+                  </span>
+                </Button>
+              )}
               <Button
                 variant="danger"
                 onClick={() => setConfirmBulkDelete(true)}
                 aria-label={`Delete ${selected.size} selected clients`}
                 title={`Delete ${selected.size} selected clients`}
-                className="w-9 px-0! sm:w-auto sm:px-3.5!"
+                className="w-9 shrink-0 px-0!"
               >
                 <Trash2 size={16} strokeWidth={2} className="shrink-0" aria-hidden />
-                <span className="hidden sm:inline">Delete {selected.size}</span>
               </Button>
-            ) : showListTools ? (
-              <>
-                <Button
-                  variant="secondary"
-                  onClick={() => setSearching(true)}
-                  aria-haspopup="dialog"
-                  aria-label="Search clients"
-                  title="Search clients"
-                  className="w-9 px-0!"
-                >
-                  <Search size={16} strokeWidth={2} className="shrink-0" aria-hidden />
-                </Button>
-                <ImportFilterMenu value={importFilter} onChange={changeImportFilter} />
-              </>
-            ) : null)}
-          {tab === 'clients' && selected.size > 0 ? (
-            <Button
-              type="button"
-              variant="primary"
-              aria-label="Move selected clients to CRM"
-              title="CRM"
-              className="flex shrink-0 items-center whitespace-nowrap px-3.5!"
-            >
-              <span className="flex items-center gap-1 leading-none">
-                CRM
-                <MdKeyboardDoubleArrowRight className="hidden text-[1.15em] sm:block" aria-hidden />
-              </span>
-            </Button>
+            </>
           ) : (
-            <AddClientMenu
-              onForm={() => setAdding(true)}
-              onImport={() => setImporting(true)}
-            />
+            <>
+              {tab === 'clients' && showListTools && (
+                <>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setSearching(true)}
+                    aria-haspopup="dialog"
+                    aria-label="Search clients"
+                    title="Search clients"
+                    className="w-9 px-0!"
+                  >
+                    <Search size={16} strokeWidth={2} className="shrink-0" aria-hidden />
+                  </Button>
+                  <ImportFilterMenu value={importFilter} onChange={changeImportFilter} />
+                </>
+              )}
+              <AddClientMenu onForm={() => setAdding(true)} onImport={() => setImporting(true)} />
+            </>
           )}
         </div>
       </div>
@@ -395,6 +410,12 @@ export function ClientsPage() {
       )}
 
       <AddClientDialog open={adding} onOpenChange={setAdding} />
+      <ClientCrmModal
+        open={addingToCrm}
+        onOpenChange={setAddingToCrm}
+        clientIds={[...selected]}
+        onDone={() => setSelected(new Set())}
+      />
       <ClientImportModal open={importing} onOpenChange={setImporting} />
       <SearchClientsDialog open={searching} onOpenChange={setSearching} onSelect={viewClient} />
       <ClientDetailsDrawer key={viewing?.id ?? 'closed'} client={viewing} onClose={() => setPicked(null)} />
@@ -429,7 +450,8 @@ export function ClientsPage() {
         confirmLabel="Delete"
         pendingLabel="Deleting…"
         onConfirm={async () => {
-          await removeClients([...selected])
+          // Selections can span pages and whole imports: delete in chunks of 500.
+          await removeClientsInChunks([...selected])
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: CLIENTS_KEY }),
             queryClient.invalidateQueries({ queryKey: CLIENT_IMPORTS_KEY }),
