@@ -90,3 +90,24 @@ export const moveCrmDeal = (id: string, stageId: string, position: number) =>
     method: 'PATCH',
     body: JSON.stringify({ stageId, position }),
   })
+
+export const renameCrmPipeline = (id: string, name: string) =>
+  api<CrmPipeline>(`/crm/pipelines/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) })
+
+/** What deleting a pipeline would remove: shown in the delete confirmation. */
+export interface CrmPipelineDeleteImpact {
+  dealCount: number
+  stageCount: number
+}
+
+export const crmPipelineDeleteImpactQuery = (id: string) =>
+  queryOptions({
+    queryKey: [...CRM_KEY, 'delete-impact', id],
+    queryFn: () => api<CrmPipelineDeleteImpact>(`/crm/pipelines/${id}/delete-impact`),
+    enabled: Boolean(id),
+    // Counts change as deals move; always ask fresh when the confirmation opens.
+    staleTime: 0,
+  })
+
+/** Deletes the pipeline with its deals, stages and access list. Clients stay. */
+export const deleteCrmPipeline = (id: string) => api<void>(`/crm/pipelines/${id}`, { method: 'DELETE' })

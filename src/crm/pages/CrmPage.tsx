@@ -16,6 +16,7 @@ import { crmBoardQuery, crmPipelinesQuery, CRM_KEY, moveCrmDeal, type CrmBoard }
 import { AddDealDialog } from '../components/AddDealDialog'
 import { CrmActions } from '../components/CrmActions'
 import { AddPipelineDrawer } from '../components/AddPipelineDrawer'
+import { ManagePipelinesDrawer } from '../components/ManagePipelinesDrawer'
 import { KanbanBoard, type BoardScrollState, type KanbanBoardHandle } from '../components/KanbanBoard'
 import { PipelineSelect } from '../components/PipelineSelect'
 import { SearchDealsDialog } from '../components/SearchDealsDialog'
@@ -58,6 +59,7 @@ export function CrmPage() {
   const [searching, setSearching] = useState(false)
   const [adding, setAdding] = useState(false)
   const [creatingPipeline, setCreatingPipeline] = useState(false)
+  const [managingPipelines, setManagingPipelines] = useState(false)
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
   const [pendingJump, setPendingJump] = useState<string | null>(null)
   const [moveError, setMoveError] = useState<string | null>(null)
@@ -383,7 +385,9 @@ export function CrmPage() {
             <CrmActions
               pipelineName={pipeline?.name ?? 'No pipeline'}
               canManage={canManage}
+              onManagePipelines={() => setManagingPipelines(true)}
               onCreatePipeline={() => setCreatingPipeline(true)}
+              hasPipelines={pipelines.length > 0}
             />
           </div>
         )}
@@ -405,6 +409,7 @@ export function CrmPage() {
           onAdded={(deal) => setPendingJump(deal.id)}
         />
         {/* Always mounted so it can slide out; it resets itself each time it opens. */}
+        <ManagePipelinesDrawer open={managingPipelines} onOpenChange={setManagingPipelines} />
         <AddPipelineDrawer
           open={creatingPipeline}
           onOpenChange={setCreatingPipeline}

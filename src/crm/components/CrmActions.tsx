@@ -76,13 +76,34 @@ const ACTIONS: CrmAction[] = [
 interface CrmActionsProps {
   /** The selected pipeline's name, tagged on the cards that act on it. */
   pipelineName: string
-  /** Owners and managers get the create-pipeline entry point. */
+  /** Owners and managers get the Manage / Create menu on the Manage pipeline card. */
   canManage?: boolean
+  onManagePipelines?: () => void
   onCreatePipeline?: () => void
+  /** False when there are no pipelines yet: Manage has nothing to manage. */
+  hasPipelines?: boolean
+}
+
+/** The Manage pipeline card's menu actions. */
+interface PipelineMenuActions {
+  onManage: () => void
+  onCreate: () => void
+  /** Manage is disabled until a pipeline exists. */
+  canManageExisting: boolean
 }
 
 /** The Actions tab: one card per pipeline setting. */
-export function CrmActions({ pipelineName, canManage = false, onCreatePipeline }: CrmActionsProps) {
+export function CrmActions({
+  pipelineName,
+  canManage = false,
+  onManagePipelines,
+  onCreatePipeline,
+  hasPipelines = false,
+}: CrmActionsProps) {
+  const pipelineMenu =
+    canManage && onManagePipelines && onCreatePipeline
+      ? { onManage: onManagePipelines, onCreate: onCreatePipeline, canManageExisting: hasPipelines }
+      : undefined
   return (
     <ul className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3" aria-label="Pipeline actions">
       {ACTIONS.map((action) => (
@@ -90,9 +111,7 @@ export function CrmActions({ pipelineName, canManage = false, onCreatePipeline }
           <ActionCard
             action={action}
             pipelineName={pipelineName}
-            onCreatePipeline={
-              canManage && action.key === 'manage-pipeline' ? onCreatePipeline : undefined
-            }
+            pipelineMenu={action.key === 'manage-pipeline' ? pipelineMenu : undefined}
           />
         </li>
       ))}
@@ -103,14 +122,14 @@ export function CrmActions({ pipelineName, canManage = false, onCreatePipeline }
 function ActionCard({
   action,
   pipelineName,
-  onCreatePipeline,
+  pipelineMenu,
 }: {
   action: CrmAction
   pipelineName: string
-  onCreatePipeline?: () => void
+  pipelineMenu?: PipelineMenuActions
 }) {
-  if (onCreatePipeline) {
-    return <PipelineMenuCard action={action} pipelineName={pipelineName} onCreatePipeline={onCreatePipeline} />
+  if (pipelineMenu) {
+    return <PipelineMenuCard action={action} pipelineName={pipelineName} menu={pipelineMenu} />
   }
   return (
     <div className="relative flex min-h-36 w-full flex-col justify-between rounded-xl bg-surface p-5 text-left shadow-lift">
@@ -162,22 +181,24 @@ function ActionCardBody({
 function PipelineMenuCard({
   action,
   pipelineName,
-  onCreatePipeline,
+  menu,
 }: {
   action: CrmAction
   pipelineName: string
-  onCreatePipeline: () => void
+  menu: PipelineMenuActions
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const manageRef = useRef<HTMLButtonElement>(null)
   const createRef = useRef<HTMLButtonElement>(null)
   const menuId = useId()
+  const canManageExisting = menu.canManageExisting
 
   useEffect(() => {
     if (!open) return
     // Focus the first item you can use, as a menu should.
-    createRef.current?.focus()
+    ;(canManageExisting ? manageRef : createRef).current?.focus()
     const onPointerDown = (event: MouseEvent) => {
       if (!ref.current?.contains(event.target as Node)) setOpen(false)
     }
@@ -192,7 +213,7 @@ function PipelineMenuCard({
       document.removeEventListener('mousedown', onPointerDown)
       document.removeEventListener('keydown', onKey)
     }
-  }, [open])
+  }, [open, canManageExisting])
 
   return (
     <div ref={ref} className="relative flex w-full">
@@ -223,25 +244,31 @@ function PipelineMenuCard({
           className="absolute top-12 right-3 z-30 w-48 rounded-lg bg-surface py-1 shadow-dialog"
         >
           <button
+            ref={manageRef}
             type="button"
             role="menuitem"
-            disabled
-            className="flex w-full cursor-not-allowed items-center gap-2.5 px-3 py-2 text-left text-label text-ink-3 opacity-60"
+            disabled={!menu.canManageExisting}
+            title={menu.canManageExisting ? undefined : 'No pipelines to manage yet'}
+            onClick={() => {
+              // Focus the card first: this item is about to unmount, and the drawer
+              // returns focus to whatever had it when it opened.
+              triggerRef.current?.focus()
+              setOpen(false)
+              menu.onManage()
+            }}
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-label text-ink hover:bg-surface-hover disabled:cursor-not-allowed disabled:text-ink-3 disabled:opacity-60 disabled:hover:bg-transparent"
           >
             <SlidersHorizontal size={15} strokeWidth={2} aria-hidden />
-            <span className="flex-1">Manage</span>
-            <span className="rounded bg-surface-hover px-1.5 py-0.5 text-micro font-medium">Soon</span>
+            Manage
           </button>
           <button
             ref={createRef}
             type="button"
             role="menuitem"
             onClick={() => {
-              // Focus the card first: this item is about to unmount, and the drawer
-              // returns focus to whatever had it when it opened.
               triggerRef.current?.focus()
               setOpen(false)
-              onCreatePipeline()
+              menu.onCreate()
             }}
             className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-label text-ink hover:bg-surface-hover"
           >
