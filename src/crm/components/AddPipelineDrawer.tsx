@@ -231,10 +231,14 @@ export function AddPipelineDrawer({ open, onOpenChange, onCreated }: AddPipeline
     setConfiguring(true)
   }
 
-  /** Select all: tick everyone, or untick everyone when all are already ticked. */
+  /**
+   * Select all: untick everyone when everyone listed is ticked, otherwise tick
+   * them all. Decided from the people listed now, so someone who dropped off
+   * the list (lost the CRM menu) can't make the first click look dead.
+   */
   function toggleAllAccess() {
     const everyone = (eligibleUsers ?? []).map((person) => person.id)
-    setExcluded((current) => (current.size === 0 ? new Set(everyone) : new Set()))
+    setExcluded((current) => (everyone.every((id) => !current.has(id)) ? new Set(everyone) : new Set()))
     setConfiguring(true)
   }
 
