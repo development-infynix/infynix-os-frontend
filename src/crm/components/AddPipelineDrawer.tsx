@@ -18,19 +18,22 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, GripVertical, Handshake, Layers, Pencil, Plus, Trash2, Users, X } from 'lucide-react'
+import { Check, ChevronDown, GripVertical, Handshake, Layers, Pencil, Plus, Trash2, Users, X } from 'lucide-react'
 import { forwardRef, useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/Button'
 import { FormError, FormField } from '@/components/FormField'
 import { ApiError } from '@/lib/api'
-import { createCrmPipeline, CRM_PIPELINES_KEY, crmPipelinesQuery } from '@/lib/crm'
+import { useSession } from '@/lib/auth'
+import { createCrmPipeline, crmEligibleUsersQuery, CRM_PIPELINES_KEY, crmPipelinesQuery } from '@/lib/crm'
 import type { CrmPipeline } from '../types'
 import { PIPELINE_TEMPLATES, templateFor, type PipelineTemplateKey } from '../templates'
+import { PipelineAccessPicker } from './PipelineAccessPicker'
 
 interface AddPipelineDrawerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreated: (pipeline: CrmPipeline) => void
+  /** `visible` is false when a manager left themselves off the access list. */
+  onCreated: (pipeline: CrmPipeline, visible: boolean) => void
 }
 
 interface DraftStage {
@@ -84,6 +87,14 @@ export function AddPipelineDrawer({ open, onOpenChange, onCreated }: AddPipeline
   const [newStageError, setNewStageError] = useState<string | null>(null)
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const newStageRef = useRef<HTMLInputElement>(null)
+  /** Step 3: people unticked by hand. Everyone else with CRM access is on the list. */
+  const [excluded, setExcluded] = useState<Set<string>>(() => new Set())
+  /** Step 3: the summary's stage list, folded away until asked for. */
+  const [stagesShown, setStagesShown] = useState(false)
+  const { user } = useSession()
+  const isOwner = user.role === 'owner'
+  const eligibleQuery = useQuery({ ...crmEligibleUsersQuery(), enabled: open })
+  const eligibleUsers = eligibleQuery.data
   const stageSensors = useSensors(
     // A few pixels before a drag starts, so a click on the handle stays a click.
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -107,6 +118,8 @@ export function AddPipelineDrawer({ open, onOpenChange, onCreated }: AddPipeline
       setNewStageName('')
       setNewStageError(null)
       setEditingKey(null)
+      setExcluded(new Set())
+      setStagesShown(false)
     }
   }
 
@@ -208,6 +221,32 @@ export function AddPipelineDrawer({ open, onOpenChange, onCreated }: AddPipeline
     newStageRef.current?.focus()
   }
 
+  function toggleAccess(id: string) {
+    setExcluded((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+    setConfiguring(true)
+  }
+
+  /** Select all: tick everyone, or untick everyone when all are already ticked. */
+  function toggleAllAccess() {
+    const everyone = (eligibleUsers ?? []).map((person) => person.id)
+    setExcluded((current) => (current.size === 0 ? new Set(everyone) : new Set()))
+    setConfiguring(true)
+  }
+
+  /** The access list to save: everyone eligible who wasn't unticked. */
+  const accessIds = (eligibleUsers ?? []).filter((person) => !excluded.has(person.id)).map((person) => person.id)
+  // Managers need a row to see a pipeline; owners see every pipeline.
+  const creatorKeepsAccess = isOwner || accessIds.includes(user.id)
+  const selfWarning =
+    !isOwner && eligibleUsers?.some((person) => person.id === user.id) && excluded.has(user.id)
+      ? 'You won’t see this pipeline after creating it.'
+      : null
+
   /** Empty, or already used by another pipeline (case-insensitive, like the server). */
   function nameProblem(): string | null {
     const value = name.trim().toLowerCase()
@@ -258,21 +297,33 @@ export function AddPipelineDrawer({ open, onOpenChange, onCreated }: AddPipeline
       setError(problem)
       return
     }
+    if (!eligibleQuery.isSuccess) {
+      setError(
+        eligibleQuery.isError
+          ? 'Couldn’t load the people with CRM access. Try again before creating the pipeline.'
+          : 'Still loading the people with CRM access. Try again in a moment.',
+      )
+      return
+    }
     setSaving(true)
     setError(null)
     try {
       const pipeline = await createCrmPipeline({
         name: name.trim(),
         stages: stages.map((stage) => stage.name.trim()),
+        userIds: accessIds,
       })
       // Put it in the list before selecting it, so the page doesn't fall back
-      // to the old first pipeline while the list refetches.
-      queryClient.setQueryData<CrmPipeline[]>([...CRM_PIPELINES_KEY], (current = []) => [
-        ...current.filter((item) => item.id !== pipeline.id),
-        pipeline,
-      ])
+      // to the old first pipeline while the list refetches. Skipped when the
+      // creator left themselves off: they won't see it.
+      if (creatorKeepsAccess) {
+        queryClient.setQueryData<CrmPipeline[]>([...CRM_PIPELINES_KEY], (current = []) => [
+          ...current.filter((item) => item.id !== pipeline.id),
+          pipeline,
+        ])
+      }
       await queryClient.invalidateQueries({ queryKey: CRM_PIPELINES_KEY })
-      onCreated(pipeline)
+      onCreated(pipeline, creatorKeepsAccess)
       onOpenChange(false)
     } catch (caught) {
       // Someone else took the name since step 1: send them back to the name field.
@@ -537,52 +588,74 @@ export function AddPipelineDrawer({ open, onOpenChange, onCreated }: AddPipeline
               </div>
             ) : (
               <div className="flex flex-col gap-6">
-                {/* What will be created: the name leads, then its stages in order. */}
-                <section aria-labelledby={`${titleId}-summary`} className="rounded-xl bg-surface shadow-lift">
-                  <div className="flex items-center gap-3 px-4 py-3.5">
-                    <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-secondary-soft text-secondary-text">
-                      <Layers size={19} strokeWidth={2} aria-hidden />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <h3
-                        id={`${titleId}-summary`}
-                        className="truncate text-title font-semibold tracking-title text-ink"
-                        title={name.trim()}
-                      >
-                        {name.trim()}
-                      </h3>
-                      <p className="text-label text-ink-3">
-                        {template.name} template <span aria-hidden>·</span>{' '}
-                        <span className="tabular-nums">{stages.length}</span>{' '}
-                        {stages.length === 1 ? 'stage' : 'stages'}
-                      </p>
+                {/* What will be created: the name leads; its stages fold out on demand. */}
+                <section className="rounded-xl bg-surface shadow-lift">
+                  <h3>
+                    <button
+                      type="button"
+                      onClick={() => setStagesShown((shown) => !shown)}
+                      aria-expanded={stagesShown}
+                      aria-controls={`${titleId}-stages`}
+                      className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-left transition-colors duration-press hover:bg-surface-hover/50"
+                    >
+                      <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-secondary-soft text-secondary-text">
+                        <Layers size={19} strokeWidth={2} aria-hidden />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className="block truncate text-title font-semibold tracking-title text-ink"
+                          title={name.trim()}
+                        >
+                          {name.trim()}
+                        </span>
+                        <span className="block text-label text-ink-3">
+                          {template.name} template <span aria-hidden>·</span>{' '}
+                          <span className="tabular-nums">{stages.length}</span>{' '}
+                          {stages.length === 1 ? 'stage' : 'stages'}
+                        </span>
+                      </span>
+                      <ChevronDown
+                        size={18}
+                        strokeWidth={2}
+                        aria-hidden
+                        className={`shrink-0 text-ink-3 transition-transform duration-enter ease-out-expo ${
+                          stagesShown ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </button>
+                  </h3>
+                  {/* Height animates through grid rows (0fr → 1fr); hidden content stays out of the tab order. */}
+                  <div
+                    id={`${titleId}-stages`}
+                    className={`grid transition-[grid-template-rows] duration-enter ease-out-expo ${
+                      stagesShown ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                    }`}
+                    inert={!stagesShown}
+                  >
+                    <div className="min-h-0 overflow-hidden">
+                      <ol className="border-t border-line px-4 py-2" aria-label="Stages in order">
+                        {stages.map((stage, index) => (
+                          <li key={stage.key} className="flex items-baseline gap-3 py-1.5 text-body text-ink">
+                            <span className="w-5 shrink-0 text-right text-label text-ink-3 tabular-nums">{index + 1}</span>
+                            <span className="min-w-0 break-words">{stage.name.trim()}</span>
+                          </li>
+                        ))}
+                      </ol>
                     </div>
                   </div>
-                  <ol className="border-t border-line px-4 py-2" aria-label="Stages in order">
-                    {stages.map((stage, index) => (
-                      <li key={stage.key} className="flex items-baseline gap-3 py-1.5 text-body text-ink">
-                        <span className="w-5 shrink-0 text-right text-label text-ink-3 tabular-nums">{index + 1}</span>
-                        <span className="min-w-0 break-words">{stage.name.trim()}</span>
-                      </li>
-                    ))}
-                  </ol>
                 </section>
 
-                {/* People: a note about what comes next, so it stays quieter than the summary. */}
-                <div className="flex gap-3 px-1">
-                  <Users size={18} strokeWidth={2} aria-hidden className="mt-0.5 shrink-0 text-ink-3" />
-                  <div className="min-w-0">
-                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body font-semibold text-ink">
-                      People
-                      <span className="rounded-md bg-surface-hover px-1.5 py-0.5 text-micro font-medium text-ink-2">
-                        Soon
-                      </span>
-                    </p>
-                    <p className="mt-1 text-label text-ink-2">
-                      Choose who can work this pipeline. You’ll be able to add people after creating it.
-                    </p>
-                  </div>
-                </div>
+                <PipelineAccessPicker
+                  users={eligibleUsers}
+                  loading={eligibleQuery.isPending}
+                  failed={eligibleQuery.isError}
+                  onRetry={() => void eligibleQuery.refetch()}
+                  excluded={excluded}
+                  onToggle={toggleAccess}
+                  onToggleAll={toggleAllAccess}
+                  selfWarning={selfWarning}
+                  canManagePermissions={isOwner}
+                />
               </div>
             )}
           </div>

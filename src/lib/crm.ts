@@ -49,7 +49,23 @@ export interface CreatePipelineInput {
   name: string
   /** The wizard's stages, left to right. Omit to use the backend's default Sales board. */
   stages?: string[]
+  /** Pipeline access: people with the CRM menu who may see and work in it. */
+  userIds?: string[]
 }
+
+/** Someone who can be given pipeline access: active, not the owner, with the CRM menu. */
+export interface CrmEligibleUser {
+  id: string
+  fullName: string
+  email: string
+}
+
+/** People who can be given pipeline access (owners and managers only). */
+export const crmEligibleUsersQuery = () =>
+  queryOptions({
+    queryKey: [...CRM_KEY, 'eligible-users'],
+    queryFn: () => api<CrmEligibleUser[]>('/crm/pipelines/eligible-users'),
+  })
 
 export const createCrmPipeline = (input: CreatePipelineInput) =>
   api<CrmPipeline>('/crm/pipelines', { method: 'POST', body: JSON.stringify(input) })

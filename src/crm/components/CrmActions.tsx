@@ -14,7 +14,7 @@ import {
 export type CrmActionKey =
   | 'manage-pipeline'
   | 'manage-stages'
-  | 'assign-users'
+  | 'assign-deals'
   | 'deal-transfer'
   | 'payment-actions'
   | 'qualification-actions'
@@ -44,9 +44,9 @@ const ACTIONS: CrmAction[] = [
     scoped: true,
   },
   {
-    key: 'assign-users',
-    title: 'Assign users',
-    description: 'Manage pipeline access and choose a deal assignment method.',
+    key: 'assign-deals',
+    title: 'Assign deals',
+    description: 'Choose how deals in this pipeline are assigned.',
     icon: Users,
     scoped: true,
   },

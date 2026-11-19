@@ -318,10 +318,23 @@ export function CrmPage() {
             ) : !pipeline ? (
               <div className="grid min-h-72 flex-1 place-items-center px-6 text-center">
                 <div className="max-w-sm">
-                  <h2 className="text-title font-semibold tracking-title text-ink">No pipelines yet</h2>
-                  <p className="mt-1.5 text-body text-ink-2">
-                    Create one to start tracking deals and clients.
-                  </p>
+                  {canManage ? (
+                    <>
+                      <h2 className="text-title font-semibold tracking-title text-ink">No pipelines yet</h2>
+                      <p className="mt-1.5 text-body text-ink-2">
+                        Create one to start tracking deals and clients.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h2 className="text-title font-semibold tracking-title text-ink">
+                        You haven’t been added to a pipeline yet
+                      </h2>
+                      <p className="mt-1.5 text-body text-ink-2">
+                        Ask an owner or manager to give you access to one.
+                      </p>
+                    </>
+                  )}
                   {canManage && (
                     <Button variant="primary" className="mt-4" onClick={() => setCreatingPipeline(true)}>
                       Create pipeline
@@ -395,9 +408,10 @@ export function CrmPage() {
         <AddPipelineDrawer
           open={creatingPipeline}
           onOpenChange={setCreatingPipeline}
-          onCreated={(created) => {
+          onCreated={(created, visible) => {
             setTab('pipeline')
-            setSelectedPipelineId(created.id)
+            // A manager who left themselves off the access list can't open it.
+            if (visible) setSelectedPipelineId(created.id)
             setSelecting(false)
             setSelected(new Set())
             setMoveError(null)
