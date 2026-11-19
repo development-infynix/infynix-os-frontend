@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import {
   ArrowLeftRight,
   CreditCard,
@@ -109,40 +109,82 @@ function ActionCard({
   pipelineName: string
   onCreatePipeline?: () => void
 }) {
-  const Icon = action.icon
+  if (onCreatePipeline) {
+    return <PipelineMenuCard action={action} pipelineName={pipelineName} onCreatePipeline={onCreatePipeline} />
+  }
   return (
     <div className="relative flex min-h-36 w-full flex-col justify-between rounded-xl bg-surface p-5 text-left shadow-lift">
-      {onCreatePipeline && <PipelineMenu onCreatePipeline={onCreatePipeline} />}
-      <div className="flex items-start gap-3.5">
+      <ActionCardBody action={action} pipelineName={pipelineName} />
+    </div>
+  )
+}
+
+function ActionCardBody({
+  action,
+  pipelineName,
+  reserveCorner = false,
+}: {
+  action: CrmAction
+  pipelineName: string
+  /** Inside the menu button: leaves room for the kebab icon and uses spans only. */
+  reserveCorner?: boolean
+}) {
+  const Icon = action.icon
+  // Inside the menu button only phrasing content is valid, so the same layout is built from spans.
+  const Row = reserveCorner ? 'span' : 'div'
+  const Title = reserveCorner ? 'span' : 'h2'
+  const Text = reserveCorner ? 'span' : 'p'
+  return (
+    <>
+      <Row className="flex items-start gap-3.5">
         <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-secondary-soft text-secondary-text">
           <Icon size={19} strokeWidth={2} aria-hidden />
         </span>
-        <div className="min-w-0 pr-7">
-          <h2 className="text-title font-semibold tracking-title text-ink">{action.title}</h2>
-          <p className="mt-1 text-label text-ink-2">{action.description}</p>
-        </div>
-      </div>
+        <Row className={`block min-w-0 ${reserveCorner ? 'pr-7' : ''}`}>
+          <Title className="block text-title font-semibold tracking-title text-ink">{action.title}</Title>
+          <Text className="mt-1 block text-label text-ink-2">{action.description}</Text>
+        </Row>
+      </Row>
       {action.scoped && (
         <span className="mt-4 self-end rounded-md bg-surface-hover px-2 py-0.5 text-caption font-medium text-ink-2">
           {pipelineName}
         </span>
       )}
-    </div>
+    </>
   )
 }
 
-/** The card's top-right menu: manage is still to come; create opens the wizard. */
-function PipelineMenu({ onCreatePipeline }: { onCreatePipeline: () => void }) {
+/**
+ * The Manage pipeline card for owners and managers: the whole card is the
+ * menu button (the kebab is only a hint), and the menu opens from its corner.
+ * Manage is still to come; Create opens the add-pipeline drawer.
+ */
+function PipelineMenuCard({
+  action,
+  pipelineName,
+  onCreatePipeline,
+}: {
+  action: CrmAction
+  pipelineName: string
+  onCreatePipeline: () => void
+}) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const createRef = useRef<HTMLButtonElement>(null)
+  const menuId = useId()
 
   useEffect(() => {
     if (!open) return
+    // Focus the first item you can use, as a menu should.
+    createRef.current?.focus()
     const onPointerDown = (event: MouseEvent) => {
       if (!ref.current?.contains(event.target as Node)) setOpen(false)
     }
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
+      if (event.key !== 'Escape') return
+      setOpen(false)
+      triggerRef.current?.focus()
     }
     document.addEventListener('mousedown', onPointerDown)
     document.addEventListener('keydown', onKey)
@@ -153,23 +195,32 @@ function PipelineMenu({ onCreatePipeline }: { onCreatePipeline: () => void }) {
   }, [open])
 
   return (
-    <div ref={ref} className="absolute top-3 right-3">
+    <div ref={ref} className="relative flex w-full">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((current) => !current)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Pipeline options"
-        title="Pipeline options"
-        className="grid size-8 place-items-center rounded-md text-ink-3 transition-colors duration-press hover:bg-surface-hover hover:text-ink"
+        aria-controls={open ? menuId : undefined}
+        className="group relative flex min-h-36 w-full flex-col justify-between rounded-xl bg-surface p-5 text-left shadow-lift transition-colors duration-press hover:bg-surface-hover/50"
       >
-        <MoreVertical size={17} strokeWidth={2} aria-hidden />
+        <span
+          aria-hidden
+          className={`absolute top-3 right-3 grid size-8 place-items-center rounded-md transition-colors duration-press group-hover:text-ink ${
+            open ? 'bg-surface-hover text-ink' : 'text-ink-3'
+          }`}
+        >
+          <MoreVertical size={17} strokeWidth={2} />
+        </span>
+        <ActionCardBody action={action} pipelineName={pipelineName} reserveCorner />
       </button>
       {open && (
         <div
+          id={menuId}
           role="menu"
           aria-label="Pipeline options"
-          className="absolute top-full right-0 z-30 mt-1 w-48 rounded-lg bg-surface py-1 shadow-dialog"
+          className="absolute top-12 right-3 z-30 w-48 rounded-lg bg-surface py-1 shadow-dialog"
         >
           <button
             type="button"
@@ -178,20 +229,24 @@ function PipelineMenu({ onCreatePipeline }: { onCreatePipeline: () => void }) {
             className="flex w-full cursor-not-allowed items-center gap-2.5 px-3 py-2 text-left text-label text-ink-3 opacity-60"
           >
             <SlidersHorizontal size={15} strokeWidth={2} aria-hidden />
-            <span className="flex-1">Manage pipeline</span>
+            <span className="flex-1">Manage</span>
             <span className="rounded bg-surface-hover px-1.5 py-0.5 text-micro font-medium">Soon</span>
           </button>
           <button
+            ref={createRef}
             type="button"
             role="menuitem"
             onClick={() => {
+              // Focus the card first: this item is about to unmount, and the drawer
+              // returns focus to whatever had it when it opened.
+              triggerRef.current?.focus()
               setOpen(false)
               onCreatePipeline()
             }}
             className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-label text-ink hover:bg-surface-hover"
           >
             <Plus size={15} strokeWidth={2} aria-hidden />
-            Create pipeline
+            Create
           </button>
         </div>
       )}

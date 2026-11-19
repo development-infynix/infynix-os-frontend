@@ -15,7 +15,7 @@ import { ApiError } from '@/lib/api'
 import { crmBoardQuery, crmPipelinesQuery, CRM_KEY, moveCrmDeal, type CrmBoard } from '@/lib/crm'
 import { AddDealDialog } from '../components/AddDealDialog'
 import { CrmActions } from '../components/CrmActions'
-import { CreatePipelineModal } from '../components/CreatePipelineModal'
+import { AddPipelineDrawer } from '../components/AddPipelineDrawer'
 import { KanbanBoard, type BoardScrollState, type KanbanBoardHandle } from '../components/KanbanBoard'
 import { PipelineSelect } from '../components/PipelineSelect'
 import { SearchDealsDialog } from '../components/SearchDealsDialog'
@@ -391,19 +391,18 @@ export function CrmPage() {
           stageName={firstStage?.name ?? 'the first stage'}
           onAdded={(deal) => setPendingJump(deal.id)}
         />
-        {creatingPipeline && (
-          <CreatePipelineModal
-            open
-            onOpenChange={setCreatingPipeline}
-            onCreated={(created) => {
-              setTab('pipeline')
-              setSelectedPipelineId(created.id)
-              setSelecting(false)
-              setSelected(new Set())
-              setMoveError(null)
-            }}
-          />
-        )}
+        {/* Always mounted so it can slide out; it resets itself each time it opens. */}
+        <AddPipelineDrawer
+          open={creatingPipeline}
+          onOpenChange={setCreatingPipeline}
+          onCreated={(created) => {
+            setTab('pipeline')
+            setSelectedPipelineId(created.id)
+            setSelecting(false)
+            setSelected(new Set())
+            setMoveError(null)
+          }}
+        />
       </div>
     </>
   )

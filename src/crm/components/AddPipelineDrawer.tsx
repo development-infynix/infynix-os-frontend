@@ -1,15 +1,14 @@
-import { useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Check, Handshake, Layers, Plus, Trash2, Users } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowDown, ArrowUp, Check, Handshake, Layers, Plus, Trash2, Users, X } from 'lucide-react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/Button'
 import { FormError, FormField } from '@/components/FormField'
-import { Modal } from '@/components/Modal'
 import { ApiError } from '@/lib/api'
-import { createCrmPipeline, CRM_PIPELINES_KEY } from '@/lib/crm'
+import { createCrmPipeline, CRM_PIPELINES_KEY, crmPipelinesQuery } from '@/lib/crm'
 import type { CrmPipeline } from '../types'
 import { PIPELINE_TEMPLATES, templateFor, type PipelineTemplateKey } from '../templates'
 
-interface CreatePipelineModalProps {
+interface AddPipelineDrawerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated: (pipeline: CrmPipeline) => void
@@ -23,6 +22,8 @@ interface DraftStage {
 const STEPS = ['Template', 'Stages', 'People'] as const
 type Step = 1 | 2 | 3
 
+const DEFAULT_TEMPLATE: PipelineTemplateKey = 'sales'
+
 let stageKey = 0
 const draftStage = (name: string): DraftStage => ({ key: `stage-${++stageKey}`, name })
 const draftStages = (names: string[]) => names.map(draftStage)
@@ -34,31 +35,78 @@ function uniqueStageName(stages: DraftStage[]): string {
   return `Stage ${number}`
 }
 
-/** Create a pipeline from a template, then rename, add, remove or reorder its stages. */
-export function CreatePipelineModal({ open, onOpenChange, onCreated }: CreatePipelineModalProps) {
+/**
+ * Create a pipeline from a template, then rename, add, remove or reorder its
+ * stages. A side drawer on the shared `app-drawer` shell. It stays mounted so
+ * it can slide out, and starts over at step 1 every time it opens.
+ */
+export function AddPipelineDrawer({ open, onOpenChange, onCreated }: AddPipelineDrawerProps) {
   const queryClient = useQueryClient()
+  const ref = useRef<HTMLDialogElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
+  const titleId = useId()
+  const descriptionId = useId()
   const [step, setStep] = useState<Step>(1)
-  const [templateKey, setTemplateKey] = useState<PipelineTemplateKey>('sales')
-  const [name, setName] = useState(templateFor('sales').name)
-  const [stages, setStages] = useState<DraftStage[]>(() => draftStages(templateFor('sales').stages))
+  const [templateKey, setTemplateKey] = useState<PipelineTemplateKey>(DEFAULT_TEMPLATE)
+  const [name, setName] = useState('')
+  /** Shown on the name field: the name is checked on step 1, never left for the save. */
+  const [nameError, setNameError] = useState<string | null>(null)
+  // Already loaded by the page; used to catch a duplicate name before step 2.
+  const { data: existingPipelines = [] } = useQuery(crmPipelinesQuery())
+  const [stages, setStages] = useState<DraftStage[]>(() => draftStages(templateFor(DEFAULT_TEMPLATE).stages))
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  /** Set by the first change. While configuring, a click on the scrim doesn't close the drawer. */
+  const [configuring, setConfiguring] = useState(false)
 
+  // Start over each time the drawer opens. Done during render (not in an
+  // effect) so the fresh wizard is what slides in, never last time's step.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) {
+      const fresh = templateFor(DEFAULT_TEMPLATE)
+      setStep(1)
+      setTemplateKey(DEFAULT_TEMPLATE)
+      setName('')
+      setNameError(null)
+      setStages(draftStages(fresh.stages))
+      setError(null)
+      setConfiguring(false)
+    }
+  }
+
+  useEffect(() => {
+    const dialog = ref.current
+    if (!dialog) return
+    if (open && !dialog.open) {
+      dialog.showModal()
+      nameRef.current?.focus()
+    } else if (!open && dialog.open) dialog.close()
+  }, [open])
 
   const template = templateFor(templateKey)
 
+  /** Closes unless a save is running. */
+  function close() {
+    if (saving) return
+    onOpenChange(false)
+  }
+
   function chooseTemplate(nextKey: PipelineTemplateKey) {
+    if (nextKey === templateKey) return
     const next = templateFor(nextKey)
     setTemplateKey(nextKey)
-    // Keep a name the person typed; swap the template's own name for the new one.
-    setName((current) => (!current.trim() || current === template.name ? next.name : current))
+    // The template only sets the stages; the name is always the person's own.
     setStages(draftStages(next.stages))
     setError(null)
+    setConfiguring(true)
   }
 
   function setStageName(index: number, value: string) {
     setStages((current) => current.map((stage, i) => (i === index ? { ...stage, name: value } : stage)))
     setError(null)
+    setConfiguring(true)
   }
 
   function moveStage(index: number, direction: -1 | 1) {
@@ -69,17 +117,30 @@ export function CreatePipelineModal({ open, onOpenChange, onCreated }: CreatePip
       ;[next[index], next[target]] = [next[target], next[index]]
       return next
     })
+    setConfiguring(true)
   }
 
   function removeStage(index: number) {
     if (stages.length === 1) return
     setStages((current) => current.filter((_, i) => i !== index))
     setError(null)
+    setConfiguring(true)
   }
 
   function addStage() {
     setStages((current) => [...current, draftStage(uniqueStageName(current))])
     setError(null)
+    setConfiguring(true)
+  }
+
+  /** Empty, or already used by another pipeline (case-insensitive, like the server). */
+  function nameProblem(): string | null {
+    const value = name.trim().toLowerCase()
+    if (!value) return 'Give the pipeline a name.'
+    if (existingPipelines.some((pipeline) => pipeline.name.trim().toLowerCase() === value)) {
+      return 'A pipeline with that name already exists. Choose another name.'
+    }
+    return null
   }
 
   function validateStages(): string | null {
@@ -93,11 +154,14 @@ export function CreatePipelineModal({ open, onOpenChange, onCreated }: CreatePip
   function goNext() {
     setError(null)
     if (step === 1) {
-      if (!name.trim()) {
-        setError('Give the pipeline a name.')
+      const problem = nameProblem()
+      if (problem) {
+        setNameError(problem)
+        nameRef.current?.focus()
         return
       }
       setStep(2)
+      setConfiguring(true)
       return
     }
     if (step === 2) {
@@ -136,6 +200,13 @@ export function CreatePipelineModal({ open, onOpenChange, onCreated }: CreatePip
       onCreated(pipeline)
       onOpenChange(false)
     } catch (caught) {
+      // Someone else took the name since step 1: send them back to the name field.
+      if (caught instanceof ApiError && caught.status === 409) {
+        setStep(1)
+        setNameError(caught.message)
+        requestAnimationFrame(() => nameRef.current?.focus())
+        return
+      }
       setError(
         caught instanceof ApiError && caught.status !== 500
           ? caught.message
@@ -147,24 +218,59 @@ export function CreatePipelineModal({ open, onOpenChange, onCreated }: CreatePip
   }
 
   return (
-    <Modal
-      open={open}
-      onOpenChange={(next) => (next ? onOpenChange(true) : !saving && onOpenChange(false))}
-      busy={saving}
-      wide
-      title="Create a pipeline"
-      description="Start from a template, then make the stages yours."
+    <dialog
+      ref={ref}
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
+      aria-busy={saving || undefined}
+      // Escape: the browser's cancel. Kept as a way out while configuring; blocked while saving.
+      onCancel={(event) => {
+        event.preventDefault()
+        close()
+      }}
+      // The browser can force-close the dialog itself (Escape pressed twice). Mid-save that
+      // would hide the result, so reopen it; otherwise keep the page's state in step.
+      onClose={() => {
+        if (saving) ref.current?.showModal()
+        else if (open) onOpenChange(false)
+      }}
+      onKeyDown={(event) => event.key === 'Escape' && event.stopPropagation()}
+      // The scrim: closes only before anything has been configured.
+      onClick={(event) => event.target === event.currentTarget && !configuring && close()}
+      tabIndex={-1}
+      className="app-drawer w-full max-w-sheet border-0 bg-surface p-0 text-ink shadow-dialog outline-none"
     >
       <form
         noValidate
-        className="flex max-h-[min(72vh,38rem)] flex-col overflow-hidden"
+        className="flex h-full flex-col"
         onSubmit={(event) => {
           event.preventDefault()
           goNext()
         }}
       >
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4">
-          <ol className="flex items-center gap-2" aria-label="Create pipeline steps">
+        <div className="flex items-start gap-2 border-b border-line px-4 py-3.5">
+          <div className="min-w-0 flex-1">
+            <h2 id={titleId} className="truncate text-title font-semibold tracking-title">
+              Create a pipeline
+            </h2>
+            <p id={descriptionId} className="mt-0.5 text-label text-ink-3">
+              Start from a template, then make the stages yours.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={close}
+            disabled={saving}
+            aria-label="Close"
+            className="grid size-9 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-surface-hover hover:text-ink disabled:opacity-40"
+          >
+            <X size={18} strokeWidth={1.9} aria-hidden />
+          </button>
+        </div>
+
+        {/* Secondary header: the steps stay in view while the body scrolls. */}
+        <nav aria-label="Create pipeline progress" className="border-b border-line bg-surface px-5 py-3">
+          <ol className="flex items-center gap-2">
             {STEPS.map((label, index) => {
               const number = (index + 1) as Step
               const done = number < step
@@ -180,9 +286,7 @@ export function CreatePipelineModal({ open, onOpenChange, onCreated }: CreatePip
                   >
                     {done ? <Check size={14} strokeWidth={2.4} aria-hidden /> : number}
                   </span>
-                  <span
-                    className={`truncate text-caption ${active ? 'font-medium text-ink' : 'text-ink-3'}`}
-                  >
+                  <span className={`truncate text-caption ${active ? 'font-medium text-ink' : 'text-ink-3'}`}>
                     {label}
                   </span>
                   {number < STEPS.length && (
@@ -192,30 +296,36 @@ export function CreatePipelineModal({ open, onOpenChange, onCreated }: CreatePip
               )
             })}
           </ol>
+        </nav>
 
-          <div className="mt-5">
+        <div className="flex-1 overflow-y-auto bg-canvas px-5 py-5">
+          <div>
             <FormError message={error} />
 
             {step === 1 ? (
               <div className="flex flex-col gap-4">
-                <FormField label="Pipeline name" htmlFor="create-pipeline-name">
+                <FormField label="Pipeline name" htmlFor="create-pipeline-name" error={nameError ?? undefined}>
                   <input
+                    ref={nameRef}
                     id="create-pipeline-name"
-                    autoFocus
                     maxLength={120}
                     value={name}
                     onChange={(event) => {
                       setName(event.target.value)
+                      setNameError(null)
                       setError(null)
+                      setConfiguring(true)
                     }}
-                    placeholder="Sales"
+                    placeholder={`e.g. ${template.name}`}
+                    aria-invalid={!!nameError}
                     className="field-input"
                   />
                 </FormField>
 
                 <div role="group" aria-label="Pipeline template">
                   <span className="mb-1.5 block text-label font-medium text-ink-2">Start from a template</span>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  {/* One column: the drawer is narrow at every screen size. */}
+                  <div className="grid gap-3">
                     {PIPELINE_TEMPLATES.map((option) => {
                       const selected = option.key === templateKey
                       const Icon = option.key === 'sales' ? Handshake : Users
@@ -237,21 +347,13 @@ export function CreatePipelineModal({ open, onOpenChange, onCreated }: CreatePip
                             </span>
                             <span className="text-body font-semibold text-ink">{option.name}</span>
                             {selected && (
-                              <Check
-                                size={16}
-                                strokeWidth={2.2}
-                                aria-hidden
-                                className="ml-auto shrink-0 text-secondary-text"
-                              />
+                              <Check size={16} strokeWidth={2.2} aria-hidden className="ml-auto shrink-0 text-secondary-text" />
                             )}
                           </span>
                           <span className="mt-2 block text-label text-ink-2">{option.description}</span>
                           <span className="mt-3 flex flex-wrap gap-1.5">
                             {option.stages.slice(0, 4).map((stage) => (
-                              <span
-                                key={stage}
-                                className="rounded-md bg-surface-hover px-1.5 py-0.5 text-caption text-ink-2"
-                              >
+                              <span key={stage} className="rounded-md bg-surface-hover px-1.5 py-0.5 text-caption text-ink-2">
                                 {stage}
                               </span>
                             ))}
@@ -281,10 +383,7 @@ export function CreatePipelineModal({ open, onOpenChange, onCreated }: CreatePip
 
                 <ul className="mt-3 flex flex-col gap-2" aria-label="Pipeline stages">
                   {stages.map((stage, index) => (
-                    <li
-                      key={stage.key}
-                      className="flex items-center gap-1.5 rounded-lg bg-canvas p-1.5 ring-1 ring-line"
-                    >
+                    <li key={stage.key} className="flex items-center gap-1.5 rounded-lg bg-surface p-1.5 ring-1 ring-line">
                       <span className="grid size-7 shrink-0 place-items-center rounded-md bg-surface-hover text-caption font-semibold text-ink-2 tabular-nums">
                         {index + 1}
                       </span>
@@ -327,46 +426,48 @@ export function CreatePipelineModal({ open, onOpenChange, onCreated }: CreatePip
                 </Button>
               </div>
             ) : (
-              <div>
-                <div className="rounded-xl bg-surface p-4 shadow-lift">
-                  <div className="flex items-start gap-3">
+              <div className="flex flex-col gap-6">
+                {/* What will be created: the name leads, then its stages in order. */}
+                <section aria-labelledby={`${titleId}-summary`} className="rounded-xl bg-surface shadow-lift">
+                  <div className="flex items-center gap-3 px-4 py-3.5">
                     <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-secondary-soft text-secondary-text">
                       <Layers size={19} strokeWidth={2} aria-hidden />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-caption font-medium text-ink-3">New pipeline</p>
-                      <h3 className="mt-0.5 truncate text-title font-semibold tracking-title text-ink">
+                      <h3
+                        id={`${titleId}-summary`}
+                        className="truncate text-title font-semibold tracking-title text-ink"
+                        title={name.trim()}
+                      >
                         {name.trim()}
                       </h3>
+                      <p className="text-label text-ink-3">
+                        {template.name} template <span aria-hidden>·</span>{' '}
+                        <span className="tabular-nums">{stages.length}</span>{' '}
+                        {stages.length === 1 ? 'stage' : 'stages'}
+                      </p>
                     </div>
-                    <span className="shrink-0 rounded-md bg-surface-hover px-2 py-0.5 text-caption font-medium text-ink-2">
-                      {template.name} template
-                    </span>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
+                  <ol className="border-t border-line px-4 py-2" aria-label="Stages in order">
                     {stages.map((stage, index) => (
-                      <span
-                        key={stage.key}
-                        className="inline-flex items-center gap-1 rounded-md bg-surface-hover px-1.5 py-0.5 text-caption text-ink-2"
-                      >
-                        <span className="text-ink-3 tabular-nums">{index + 1}</span>
-                        {stage.name.trim()}
-                      </span>
+                      <li key={stage.key} className="flex items-baseline gap-3 py-1.5 text-body text-ink">
+                        <span className="w-5 shrink-0 text-right text-label text-ink-3 tabular-nums">{index + 1}</span>
+                        <span className="min-w-0 break-words">{stage.name.trim()}</span>
+                      </li>
                     ))}
-                  </div>
-                </div>
+                  </ol>
+                </section>
 
-                <div className="mt-3 flex items-start gap-3 rounded-xl bg-canvas p-4 ring-1 ring-line">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-surface text-ink-3 shadow-lift">
-                    <Users size={19} strokeWidth={2} aria-hidden />
-                  </span>
+                {/* People: a note about what comes next, so it stays quieter than the summary. */}
+                <div className="flex gap-3 px-1">
+                  <Users size={18} strokeWidth={2} aria-hidden className="mt-0.5 shrink-0 text-ink-3" />
                   <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-body font-semibold text-ink">User assignment</h3>
-                      <span className="rounded-md bg-secondary-soft px-2 py-0.5 text-caption font-medium text-secondary-text">
-                        Coming soon
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body font-semibold text-ink">
+                      People
+                      <span className="rounded-md bg-surface-hover px-1.5 py-0.5 text-micro font-medium text-ink-2">
+                        Soon
                       </span>
-                    </div>
+                    </p>
                     <p className="mt-1 text-label text-ink-2">
                       Choose who can work this pipeline. You’ll be able to add people after creating it.
                     </p>
@@ -377,11 +478,13 @@ export function CreatePipelineModal({ open, onOpenChange, onCreated }: CreatePip
           </div>
         </div>
 
-        <div className="mt-5 flex items-center gap-2 border-t border-line bg-canvas/60 px-5 py-3.5 [&>*]:flex-1 sm:justify-end sm:[&>*]:flex-none">
-          <Button variant="secondary" type="button" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
-          </Button>
-          {step > 1 && (
+        {/* Step 1 can be cancelled; later steps go Back instead (✕ and Escape still close). */}
+        <div className="flex items-center gap-2 border-t border-line bg-canvas/60 px-5 py-3.5 [&>*]:flex-1 sm:justify-end sm:[&>*]:flex-none">
+          {step === 1 ? (
+            <Button variant="secondary" type="button" onClick={close} disabled={saving}>
+              Cancel
+            </Button>
+          ) : (
             <Button
               variant="secondary"
               type="button"
@@ -399,7 +502,7 @@ export function CreatePipelineModal({ open, onOpenChange, onCreated }: CreatePip
           </Button>
         </div>
       </form>
-    </Modal>
+    </dialog>
   )
 }
 
@@ -424,9 +527,7 @@ function IconButton({
       aria-label={label}
       title={label}
       className={`grid size-8 shrink-0 place-items-center rounded-md transition-colors duration-press disabled:opacity-30 ${
-        danger
-          ? 'text-ink-3 hover:bg-danger-soft hover:text-danger'
-          : 'text-ink-3 hover:bg-surface-hover hover:text-ink'
+        danger ? 'text-ink-3 hover:bg-danger-soft hover:text-danger' : 'text-ink-3 hover:bg-surface-hover hover:text-ink'
       }`}
     >
       {children}
