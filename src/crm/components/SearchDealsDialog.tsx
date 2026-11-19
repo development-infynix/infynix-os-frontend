@@ -1,41 +1,38 @@
+import { useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
+import { Loader } from '@/components/Loader'
 import { Modal } from '@/components/Modal'
-import type { BoardColumns, CrmDeal, CrmStage } from '../types'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
+import { crmDealSearchQuery } from '@/lib/crm'
+import type { CrmDeal, CrmStage } from '../types'
 
 interface SearchDealsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  pipelineId: string
   stages: CrmStage[]
-  columns: BoardColumns
   /** Jumps to the card on the board. */
   onPick: (deal: CrmDeal) => void
 }
 
-const MAX_RESULTS = 20
-
-/** Finds a deal in the current pipeline by client name, email or phone. Searches the dummy board for now. */
-export function SearchDealsDialog({ open, onOpenChange, stages, columns, onPick }: SearchDealsDialogProps) {
+/** Finds a deal in the current pipeline by client name, email or phone. */
+export function SearchDealsDialog({ open, onOpenChange, pipelineId, stages, onPick }: SearchDealsDialogProps) {
   const [q, setQ] = useState('')
-  const term = q.trim().toLowerCase()
-
-  const results = useMemo(() => {
-    if (!term) return []
-    const found: { deal: CrmDeal; stage: CrmStage }[] = []
-    for (const stage of stages) {
-      for (const deal of columns[stage.id] ?? []) {
-        const haystack = `${deal.name} ${deal.email ?? ''} ${deal.phone ?? ''}`.toLowerCase()
-        if (haystack.includes(term)) found.push({ deal, stage })
-        if (found.length >= MAX_RESULTS) return found
-      }
-    }
-    return found
-  }, [term, stages, columns])
+  const term = q.trim()
+  const debounced = useDebouncedValue(term, 250)
+  const search = useQuery({
+    ...crmDealSearchQuery(pipelineId, debounced),
+    enabled: open && Boolean(debounced),
+  })
+  const results = search.data?.items ?? []
 
   function close() {
     setQ('')
     onOpenChange(false)
   }
+
+  const stageName = (id: string) => stages.find((stage) => stage.id === id)?.name ?? 'Stage'
 
   return (
     <Modal open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())} title="Search deals">
@@ -61,11 +58,17 @@ export function SearchDealsDialog({ open, onOpenChange, stages, columns, onPick 
         <div className="mt-3 max-h-80 overflow-y-auto" aria-live="polite">
           {!term ? (
             <p className="py-6 text-center text-label text-ink-3">Type to search this pipeline.</p>
+          ) : search.isError ? (
+            <p className="py-6 text-center text-label text-danger">Couldn’t search. Check your connection.</p>
+          ) : (search.isFetching || term !== debounced) && results.length === 0 ? (
+            <div className="grid place-items-center py-6">
+              <Loader label="Searching deals" />
+            </div>
           ) : results.length === 0 ? (
-            <p className="py-6 text-center text-label text-ink-3">No deal matches “{q.trim()}”.</p>
+            <p className="py-6 text-center text-label text-ink-3">No deal matches “{term}”.</p>
           ) : (
             <ul className="flex flex-col">
-              {results.map(({ deal, stage }) => (
+              {results.map((deal) => (
                 <li key={deal.id}>
                   <button
                     type="button"
@@ -82,7 +85,7 @@ export function SearchDealsDialog({ open, onOpenChange, stages, columns, onPick 
                       </span>
                     </span>
                     <span className="shrink-0 rounded-md bg-surface-hover px-2 py-0.5 text-caption font-medium text-ink-2">
-                      {stage.name}
+                      {stageName(deal.stageId)}
                     </span>
                   </button>
                 </li>

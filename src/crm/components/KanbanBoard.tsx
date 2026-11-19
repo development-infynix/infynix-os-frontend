@@ -33,6 +33,10 @@ export interface KanbanBoardProps {
   stages: CrmStage[]
   columns: BoardColumns
   onColumnsChange: (next: BoardColumns) => void
+  /** Every stage's true count, so a capped column still shows its total. */
+  totals?: Record<string, number>
+  /** Persists a drop: the deal's new stage and index within it. */
+  onMove?: (dealId: string, stageId: string, position: number) => void
   selectable?: boolean
   selectedIds?: ReadonlySet<string>
   onToggleSelect?: (id: string) => void
@@ -58,6 +62,8 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
     stages,
     columns,
     onColumnsChange,
+    totals,
+    onMove,
     selectable = false,
     selectedIds = NO_SELECTION,
     onToggleSelect,
@@ -72,6 +78,8 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null)
   /** The board before the drag, restored if it's cancelled. */
   const snapshot = useRef<BoardColumns | null>(null)
+  /** Where the card started, so a drop that changed nothing isn't saved. */
+  const dragOrigin = useRef<{ stageId: string; index: number } | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
 
   const sensors = useSensors(
@@ -82,8 +90,11 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
   )
 
   const boardTotal = useMemo(
-    () => stages.reduce((sum, stage) => sum + (columns[stage.id]?.length ?? 0), 0),
-    [stages, columns],
+    () =>
+      totals
+        ? Object.values(totals).reduce((sum, count) => sum + count, 0)
+        : stages.reduce((sum, stage) => sum + (columns[stage.id]?.length ?? 0), 0),
+    [stages, columns, totals],
   )
 
   /** The stage a card or column id belongs to. */
@@ -113,6 +124,11 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
 
   function onDragStart({ active }: DragStartEvent) {
     snapshot.current = columns
+    const stageId = findStage(active.id)
+    const index = stageId
+      ? (columns[stageId] ?? []).findIndex((deal) => deal.id === String(active.id))
+      : -1
+    dragOrigin.current = stageId && index >= 0 ? { stageId, index } : null
     setActiveId(active.id)
   }
 
@@ -143,23 +159,68 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
   }
 
   function onDragEnd({ active, over }: DragEndEvent) {
-    setActiveId(null)
+    const origin = dragOrigin.current
+    const before = snapshot.current
+    dragOrigin.current = null
     snapshot.current = null
-    const from = findStage(active.id)
-    const to = findStage(over?.id)
-    if (!from || !to || from !== to || !over) return
+    setActiveId(null)
 
-    const list = columns[from] ?? []
-    const oldIndex = list.findIndex((deal) => deal.id === String(active.id))
-    const newIndex = list.findIndex((deal) => deal.id === String(over.id))
-    if (oldIndex >= 0 && newIndex >= 0 && oldIndex !== newIndex) {
-      onColumnsChange({ ...columns, [from]: arrayMove(list, oldIndex, newIndex) })
+    // Dropped outside a column: put it back where it started.
+    if (!over) {
+      if (before) onColumnsChange(before)
+      return
+    }
+
+    let next = columns
+    const from = findStage(active.id)
+    const to = findStage(over.id)
+
+    if (from && to && from !== to) {
+      // Usually onDragOver has moved it already; this covers a drop that skipped it.
+      const source = columns[from] ?? []
+      const target = columns[to] ?? []
+      const moving = source.find((deal) => deal.id === String(active.id))
+      if (moving) {
+        const without = target.filter((deal) => deal.id !== moving.id)
+        const overIndex = without.findIndex((deal) => deal.id === String(over.id))
+        const index = overIndex >= 0 ? overIndex : without.length
+        next = {
+          ...columns,
+          [from]: source.filter((deal) => deal.id !== moving.id),
+          [to]: [...without.slice(0, index), moving, ...without.slice(index)],
+        }
+        onColumnsChange(next)
+      }
+    } else if (from && to && from === to) {
+      const list = columns[from] ?? []
+      const oldIndex = list.findIndex((deal) => deal.id === String(active.id))
+      const newIndex = list.findIndex((deal) => deal.id === String(over.id))
+      if (oldIndex >= 0 && newIndex >= 0 && oldIndex !== newIndex) {
+        next = { ...columns, [from]: arrayMove(list, oldIndex, newIndex) }
+        onColumnsChange(next)
+      }
+    }
+
+    const finalStage = stages.find((stage) =>
+      (next[stage.id] ?? []).some((deal) => deal.id === String(active.id)),
+    )?.id
+    const finalIndex = finalStage
+      ? (next[finalStage] ?? []).findIndex((deal) => deal.id === String(active.id))
+      : -1
+    if (
+      origin &&
+      finalStage &&
+      finalIndex >= 0 &&
+      (finalStage !== origin.stageId || finalIndex !== origin.index)
+    ) {
+      onMove?.(String(active.id), finalStage, finalIndex)
     }
   }
 
   function onDragCancel() {
     if (snapshot.current) onColumnsChange(snapshot.current)
     snapshot.current = null
+    dragOrigin.current = null
     setActiveId(null)
   }
 
@@ -241,6 +302,7 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
             stage={stage}
             index={index + 1}
             deals={columns[stage.id] ?? []}
+            total={totals?.[stage.id]}
             boardTotal={boardTotal}
             selectable={selectable}
             selectedIds={selectedIds}

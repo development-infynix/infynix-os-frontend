@@ -1,6 +1,6 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, ListChecks, Plus, Search } from 'lucide-react'
 import {
-  useCallback,
   useEffect,
   useId,
   useRef,
@@ -9,13 +9,17 @@ import {
   type ReactNode,
 } from 'react'
 import { Button } from '@/components/Button'
+import { Loader } from '@/components/Loader'
+import { useSession } from '@/lib/auth'
+import { ApiError } from '@/lib/api'
+import { crmBoardQuery, crmPipelinesQuery, CRM_KEY, moveCrmDeal, type CrmBoard } from '@/lib/crm'
 import { AddDealDialog } from '../components/AddDealDialog'
 import { CrmActions } from '../components/CrmActions'
+import { CreatePipelineModal } from '../components/CreatePipelineModal'
 import { KanbanBoard, type BoardScrollState, type KanbanBoardHandle } from '../components/KanbanBoard'
 import { PipelineSelect } from '../components/PipelineSelect'
 import { SearchDealsDialog } from '../components/SearchDealsDialog'
-import { DUMMY_BOARDS, DUMMY_PIPELINES } from '../dummy-data'
-import type { BoardColumns, CrmDeal } from '../types'
+import type { BoardColumns } from '../types'
 
 type Tab = 'pipeline' | 'actions'
 
@@ -40,29 +44,47 @@ function writeStored(key: string, value: string) {
 
 /**
  * CRM: a kanban board per pipeline (Pipeline tab) and the pipeline's settings
- * (Actions tab). Runs on dummy data; nothing is saved yet.
+ * (Actions tab). Pipelines, stages and deals come from the API.
  */
 export function CrmPage() {
+  const { user } = useSession()
+  const canManage = user.role === 'owner' || user.role === 'manager'
+  const queryClient = useQueryClient()
+
   const [tab, setTab] = useState<Tab>(() => (readStored(TAB_STORAGE_KEY) === 'actions' ? 'actions' : 'pipeline'))
-  const [pipelineId, setPipelineId] = useState(() => {
-    const stored = readStored(PIPELINE_STORAGE_KEY)
-    return DUMMY_PIPELINES.some((pipeline) => pipeline.id === stored) ? stored! : DUMMY_PIPELINES[0].id
-  })
-  const [boards, setBoards] = useState<Record<string, BoardColumns>>(DUMMY_BOARDS)
+  const [selectedPipelineId, setSelectedPipelineId] = useState(() => readStored(PIPELINE_STORAGE_KEY) ?? '')
   const [selecting, setSelecting] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [searching, setSearching] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [creatingPipeline, setCreatingPipeline] = useState(false)
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
+  const [pendingJump, setPendingJump] = useState<string | null>(null)
+  const [moveError, setMoveError] = useState<string | null>(null)
   const [scroll, setScroll] = useState<BoardScrollState>({ canPrev: false, canNext: false })
   const board = useRef<KanbanBoardHandle>(null)
 
-  const pipeline = DUMMY_PIPELINES.find((item) => item.id === pipelineId) ?? DUMMY_PIPELINES[0]
-  const columns = boards[pipeline.id] ?? {}
-  const firstStage = pipeline.stages[0]
+  const pipelinesQuery = useQuery(crmPipelinesQuery())
+  const pipelines = pipelinesQuery.data ?? []
+  const pipeline = pipelines.find((item) => item.id === selectedPipelineId) ?? pipelines[0]
+  const activePipelineId = pipeline?.id ?? ''
+
+  const boardQuery = useQuery(crmBoardQuery(activePipelineId))
+  const columns = boardQuery.data?.columns ?? {}
+  const stages = boardQuery.data?.stages ?? pipeline?.stages ?? []
+  const firstStage = stages[0]
 
   useEffect(() => writeStored(TAB_STORAGE_KEY, tab), [tab])
-  useEffect(() => writeStored(PIPELINE_STORAGE_KEY, pipelineId), [pipelineId])
+
+  // Remember the choice; an id that no longer exists falls back to the first.
+  useEffect(() => {
+    const list = pipelinesQuery.data
+    if (!list?.length) return
+    writeStored(
+      PIPELINE_STORAGE_KEY,
+      list.some((item) => item.id === selectedPipelineId) ? selectedPipelineId : list[0].id,
+    )
+  }, [pipelinesQuery.data, selectedPipelineId])
 
   // A search result's highlight fades after a moment.
   useEffect(() => {
@@ -87,37 +109,24 @@ export function CrmPage() {
   }
 
   function changePipeline(id: string) {
-    setPipelineId(id)
+    setSelectedPipelineId(id)
     setSelecting(false)
     setSelected(new Set())
+    setMoveError(null)
   }
 
-  const setColumns = useCallback(
-    (next: BoardColumns) => setBoards((current) => ({ ...current, [pipeline.id]: next })),
-    [pipeline.id],
-  )
-
-  const toggleSelected = useCallback(
-    (id: string) =>
-      setSelected((current) => {
-        const next = new Set(current)
-        if (next.has(id)) next.delete(id)
-        else next.add(id)
-        return next
-      }),
-    [],
-  )
+  function toggleSelected(id: string) {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   function stopSelecting() {
     setSelecting(false)
     setSelected(new Set())
-  }
-
-  function addDeal(input: Omit<CrmDeal, 'id' | 'addedAt'>) {
-    if (!firstStage) return
-    const deal: CrmDeal = { ...input, id: `local-${Date.now()}`, addedAt: new Date().toISOString() }
-    setColumns({ ...columns, [firstStage.id]: [deal, ...(columns[firstStage.id] ?? [])] })
-    jumpTo(deal.id)
   }
 
   /** Scrolls the card into view and flashes it. */
@@ -130,6 +139,44 @@ export function CrmPage() {
         ?.scrollIntoView({ block: 'center', inline: 'center', behavior: reduce ? 'auto' : 'smooth' })
     })
   }
+
+  // A new card's scroll waits for the invalidated board to arrive.
+  useEffect(() => {
+    if (!pendingJump || !boardQuery.data) return
+    const id = pendingJump
+    const timer = window.setTimeout(() => {
+      jumpTo(id)
+      setPendingJump(null)
+    }, 80)
+    return () => window.clearTimeout(timer)
+  }, [pendingJump, boardQuery.data])
+
+  /** Drag state lives in the board query, so a refetch or failure restores it. */
+  function updateColumns(next: BoardColumns) {
+    queryClient.setQueryData<CrmBoard>(
+      [...CRM_KEY, 'board', activePipelineId],
+      (current) => (current ? { ...current, columns: next } : current),
+    )
+  }
+
+  async function moveDeal(dealId: string, stageId: string, position: number) {
+    setMoveError(null)
+    try {
+      await moveCrmDeal(dealId, stageId, position)
+      await queryClient.invalidateQueries({ queryKey: [...CRM_KEY, 'board', activePipelineId] })
+    } catch (caught) {
+      setMoveError(
+        caught instanceof ApiError && caught.status !== 500
+          ? caught.message
+          : 'Couldn’t move that deal. It’s back where it was.',
+      )
+      await queryClient.invalidateQueries({ queryKey: [...CRM_KEY, 'board', activePipelineId] })
+    }
+  }
+
+  const retryPipelines = () => void queryClient.invalidateQueries({ queryKey: [...CRM_KEY, 'pipelines'] })
+  const retryBoard = () =>
+    void queryClient.invalidateQueries({ queryKey: [...CRM_KEY, 'board', activePipelineId] })
 
   return (
     <>
@@ -146,147 +193,232 @@ export function CrmPage() {
       <div className="hidden w-full flex-col px-5 pb-24 sm:flex sm:min-h-0 sm:flex-1 sm:px-10 sm:py-10">
         <h1 className="sr-only">CRM</h1>
 
-      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-3 pt-4 sm:pt-0">
-        <div
-          role="tablist"
-          aria-label="CRM sections"
-          onKeyDown={onTabKeyDown}
-          className="flex shrink-0 gap-1 rounded-xl bg-canvas p-1.5 shadow-well"
-        >
-          <TabButton
-            id={pipelineTabId}
-            controls={pipelinePanelId}
-            selected={tab === 'pipeline'}
-            onSelect={() => setTab('pipeline')}
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-3 pt-4 sm:pt-0">
+          <div
+            role="tablist"
+            aria-label="CRM sections"
+            onKeyDown={onTabKeyDown}
+            className="flex shrink-0 gap-1 rounded-xl bg-canvas p-1.5 shadow-well"
           >
-            Pipeline
-          </TabButton>
-          <TabButton
-            id={actionsTabId}
-            controls={actionsPanelId}
-            selected={tab === 'actions'}
-            onSelect={() => setTab('actions')}
-          >
-            Actions
-          </TabButton>
-        </div>
+            <TabButton
+              id={pipelineTabId}
+              controls={pipelinePanelId}
+              selected={tab === 'pipeline'}
+              onSelect={() => setTab('pipeline')}
+            >
+              Pipeline
+            </TabButton>
+            <TabButton
+              id={actionsTabId}
+              controls={actionsPanelId}
+              selected={tab === 'actions'}
+              onSelect={() => setTab('actions')}
+            >
+              Actions
+            </TabButton>
+          </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          {tab === 'pipeline' &&
-            (selecting ? (
-              <>
-                <p className="text-label text-ink-2 tabular-nums" aria-live="polite">
-                  {selected.size} selected
-                </p>
-                <Button variant="secondary" onClick={stopSelecting}>
-                  Done
-                </Button>
-              </>
-            ) : (
-              <>
+          <div className="ml-auto flex items-center gap-2">
+            {tab === 'pipeline' &&
+              (selecting ? (
+                <>
+                  <p className="text-label text-ink-2 tabular-nums" aria-live="polite">
+                    {selected.size} selected
+                  </p>
+                  <Button variant="secondary" onClick={stopSelecting}>
+                    Done
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setSearching(true)}
+                    disabled={!pipeline}
+                    aria-haspopup="dialog"
+                    aria-label="Search deals"
+                    title="Search deals"
+                    className="w-9 px-0!"
+                  >
+                    <Search size={16} strokeWidth={2} aria-hidden />
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setSelecting(true)}
+                    disabled={!pipeline}
+                    aria-label="Select deals"
+                    title="Select deals"
+                    className="w-9 px-0! sm:w-auto sm:px-3.5!"
+                  >
+                    <ListChecks size={16} strokeWidth={2} aria-hidden className="shrink-0" />
+                    <span className="hidden sm:inline">Select</span>
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => setAdding(true)}
+                    aria-haspopup="dialog"
+                    aria-label="Add a deal"
+                    title="Add a deal"
+                    disabled={!pipeline || !firstStage}
+                    className="w-9 px-0! sm:w-auto sm:px-3.5!"
+                  >
+                    <Plus size={16} strokeWidth={2.25} aria-hidden className="shrink-0" />
+                    <span className="hidden sm:inline">Add deal</span>
+                  </Button>
+                </>
+              ))}
+            <PipelineSelect
+              pipelines={pipelines}
+              value={pipeline?.id ?? ''}
+              onChange={changePipeline}
+            />
+            {tab === 'pipeline' && (
+              <div className="hidden items-center gap-1.5 sm:flex">
                 <Button
                   variant="secondary"
-                  onClick={() => setSearching(true)}
-                  aria-haspopup="dialog"
-                  aria-label="Search deals"
-                  title="Search deals"
+                  onClick={() => board.current?.scrollByColumn(-1)}
+                  disabled={!scroll.canPrev}
+                  aria-label="Previous stages"
+                  title="Previous stages"
                   className="w-9 px-0!"
                 >
-                  <Search size={16} strokeWidth={2} aria-hidden />
+                  <ChevronLeft size={16} strokeWidth={2} aria-hidden />
                 </Button>
                 <Button
                   variant="secondary"
-                  onClick={() => setSelecting(true)}
-                  aria-label="Select deals"
-                  title="Select deals"
-                  className="w-9 px-0! sm:w-auto sm:px-3.5!"
+                  onClick={() => board.current?.scrollByColumn(1)}
+                  disabled={!scroll.canNext}
+                  aria-label="Next stages"
+                  title="Next stages"
+                  className="w-9 px-0!"
                 >
-                  <ListChecks size={16} strokeWidth={2} aria-hidden className="shrink-0" />
-                  <span className="hidden sm:inline">Select</span>
+                  <ChevronRight size={16} strokeWidth={2} aria-hidden />
                 </Button>
-                <Button
-                  variant="primary"
-                  onClick={() => setAdding(true)}
-                  aria-haspopup="dialog"
-                  aria-label="Add a deal"
-                  title="Add a deal"
-                  disabled={!firstStage}
-                  className="w-9 px-0! sm:w-auto sm:px-3.5!"
-                >
-                  <Plus size={16} strokeWidth={2.25} aria-hidden className="shrink-0" />
-                  <span className="hidden sm:inline">Add deal</span>
-                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {tab === 'pipeline' ? (
+          <div
+            id={pipelinePanelId}
+            role="tabpanel"
+            aria-labelledby={pipelineTabId}
+            className="mt-5 flex flex-col sm:min-h-0 sm:flex-1"
+          >
+            {pipelinesQuery.isPending ? (
+              <div className="grid min-h-72 flex-1 place-items-center">
+                <Loader label="Loading pipelines" />
+              </div>
+            ) : pipelinesQuery.isError ? (
+              <LoadFailure
+                message="Couldn’t load your pipelines. Check your connection and try again."
+                onRetry={retryPipelines}
+              />
+            ) : !pipeline ? (
+              <div className="grid min-h-72 flex-1 place-items-center px-6 text-center">
+                <div className="max-w-sm">
+                  <h2 className="text-title font-semibold tracking-title text-ink">No pipelines yet</h2>
+                  <p className="mt-1.5 text-body text-ink-2">
+                    Create one to start tracking deals and clients.
+                  </p>
+                  {canManage && (
+                    <Button variant="primary" className="mt-4" onClick={() => setCreatingPipeline(true)}>
+                      Create pipeline
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : boardQuery.isPending ? (
+              <div className="grid min-h-72 flex-1 place-items-center">
+                <Loader label="Loading the board" />
+              </div>
+            ) : boardQuery.isError ? (
+              <LoadFailure
+                message="Couldn’t load this pipeline’s board. Check your connection and try again."
+                onRetry={retryBoard}
+              />
+            ) : (
+              <>
+                {moveError && (
+                  <div
+                    role="alert"
+                    className="mb-3 rounded-lg bg-danger-soft px-3 py-2.5 text-label text-danger"
+                  >
+                    {moveError}
+                  </div>
+                )}
+                <KanbanBoard
+                  ref={board}
+                  stages={stages}
+                  columns={columns}
+                  onColumnsChange={updateColumns}
+                  totals={boardQuery.data?.totals}
+                  onMove={(dealId, stageId, position) => void moveDeal(dealId, stageId, position)}
+                  selectable={selecting}
+                  selectedIds={selected}
+                  onToggleSelect={toggleSelected}
+                  dragDisabled={selecting}
+                  highlightedId={highlightedId}
+                  onScrollStateChange={setScroll}
+                />
               </>
-            ))}
-          <PipelineSelect pipelines={DUMMY_PIPELINES} value={pipeline.id} onChange={changePipeline} />
-          {tab === 'pipeline' && (
-            <div className="hidden items-center gap-1.5 sm:flex">
-              <Button
-                variant="secondary"
-                onClick={() => board.current?.scrollByColumn(-1)}
-                disabled={!scroll.canPrev}
-                aria-label="Previous stages"
-                title="Previous stages"
-                className="w-9 px-0!"
-              >
-                <ChevronLeft size={16} strokeWidth={2} aria-hidden />
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => board.current?.scrollByColumn(1)}
-                disabled={!scroll.canNext}
-                aria-label="Next stages"
-                title="Next stages"
-                className="w-9 px-0!"
-              >
-                <ChevronRight size={16} strokeWidth={2} aria-hidden />
-              </Button>
-            </div>
-          )}
-        </div>
-      </div>
+            )}
+          </div>
+        ) : (
+          <div id={actionsPanelId} role="tabpanel" aria-labelledby={actionsTabId} className="mt-5">
+            <CrmActions
+              pipelineName={pipeline?.name ?? 'No pipeline'}
+              canManage={canManage}
+              onCreatePipeline={() => setCreatingPipeline(true)}
+            />
+          </div>
+        )}
 
-      {tab === 'pipeline' ? (
-        <div
-          id={pipelinePanelId}
-          role="tabpanel"
-          aria-labelledby={pipelineTabId}
-          className="mt-5 flex flex-col sm:min-h-0 sm:flex-1"
-        >
-          <KanbanBoard
-            ref={board}
-            stages={pipeline.stages}
-            columns={columns}
-            onColumnsChange={setColumns}
-            selectable={selecting}
-            selectedIds={selected}
-            onToggleSelect={toggleSelected}
-            dragDisabled={selecting}
-            highlightedId={highlightedId}
-            onScrollStateChange={setScroll}
+        <SearchDealsDialog
+          open={searching}
+          onOpenChange={setSearching}
+          pipelineId={activePipelineId}
+          stages={stages}
+          onPick={(deal) => jumpTo(deal.id)}
+        />
+        <AddDealDialog
+          open={adding}
+          onOpenChange={setAdding}
+          pipelineId={activePipelineId}
+          pipelineName={pipeline?.name ?? 'this pipeline'}
+          stageId={firstStage?.id}
+          stageName={firstStage?.name ?? 'the first stage'}
+          onAdded={(deal) => setPendingJump(deal.id)}
+        />
+        {creatingPipeline && (
+          <CreatePipelineModal
+            open
+            onOpenChange={setCreatingPipeline}
+            onCreated={(created) => {
+              setTab('pipeline')
+              setSelectedPipelineId(created.id)
+              setSelecting(false)
+              setSelected(new Set())
+              setMoveError(null)
+            }}
           />
-        </div>
-      ) : (
-        <div id={actionsPanelId} role="tabpanel" aria-labelledby={actionsTabId} className="mt-5">
-          <CrmActions pipelineName={pipeline.name} />
-        </div>
-      )}
-
-      <SearchDealsDialog
-        open={searching}
-        onOpenChange={setSearching}
-        stages={pipeline.stages}
-        columns={columns}
-        onPick={(deal) => jumpTo(deal.id)}
-      />
-      <AddDealDialog
-        open={adding}
-        onOpenChange={setAdding}
-        stageName={firstStage?.name ?? 'the first stage'}
-        onAdd={addDeal}
-      />
+        )}
       </div>
     </>
+  )
+}
+
+function LoadFailure({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="grid min-h-72 place-items-center px-6 text-center">
+      <div className="max-w-sm">
+        <p className="text-body text-ink-2">{message}</p>
+        <Button variant="secondary" className="mt-3" onClick={onRetry}>
+          Try again
+        </Button>
+      </div>
+    </div>
   )
 }
 

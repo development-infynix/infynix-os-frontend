@@ -1,8 +1,11 @@
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeftRight,
   CreditCard,
   Layers,
   ListChecks,
+  MoreVertical,
+  Plus,
   SlidersHorizontal,
   Users,
   type LucideIcon,
@@ -73,16 +76,24 @@ const ACTIONS: CrmAction[] = [
 interface CrmActionsProps {
   /** The selected pipeline's name, tagged on the cards that act on it. */
   pipelineName: string
-  onSelect?: (key: CrmActionKey) => void
+  /** Owners and managers get the create-pipeline entry point. */
+  canManage?: boolean
+  onCreatePipeline?: () => void
 }
 
 /** The Actions tab: one card per pipeline setting. */
-export function CrmActions({ pipelineName, onSelect }: CrmActionsProps) {
+export function CrmActions({ pipelineName, canManage = false, onCreatePipeline }: CrmActionsProps) {
   return (
     <ul className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3" aria-label="Pipeline actions">
       {ACTIONS.map((action) => (
         <li key={action.key} className="flex">
-          <ActionCard action={action} pipelineName={pipelineName} onSelect={onSelect} />
+          <ActionCard
+            action={action}
+            pipelineName={pipelineName}
+            onCreatePipeline={
+              canManage && action.key === 'manage-pipeline' ? onCreatePipeline : undefined
+            }
+          />
         </li>
       ))}
     </ul>
@@ -92,20 +103,21 @@ export function CrmActions({ pipelineName, onSelect }: CrmActionsProps) {
 function ActionCard({
   action,
   pipelineName,
-  onSelect,
+  onCreatePipeline,
 }: {
   action: CrmAction
   pipelineName: string
-  onSelect?: (key: CrmActionKey) => void
+  onCreatePipeline?: () => void
 }) {
   const Icon = action.icon
-  const body = (
-    <>
+  return (
+    <div className="relative flex min-h-36 w-full flex-col justify-between rounded-xl bg-surface p-5 text-left shadow-lift">
+      {onCreatePipeline && <PipelineMenu onCreatePipeline={onCreatePipeline} />}
       <div className="flex items-start gap-3.5">
         <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-secondary-soft text-secondary-text">
           <Icon size={19} strokeWidth={2} aria-hidden />
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 pr-7">
           <h2 className="text-title font-semibold tracking-title text-ink">{action.title}</h2>
           <p className="mt-1 text-label text-ink-2">{action.description}</p>
         </div>
@@ -115,19 +127,74 @@ function ActionCard({
           {pipelineName}
         </span>
       )}
-    </>
+    </div>
   )
-  const card = 'flex min-h-36 w-full flex-col justify-between rounded-xl bg-surface p-5 text-left shadow-lift'
+}
 
-  // Not wired yet: plain cards until each action has its drawer.
-  if (!onSelect) return <div className={card}>{body}</div>
+/** The card's top-right menu: manage is still to come; create opens the wizard. */
+function PipelineMenu({ onCreatePipeline }: { onCreatePipeline: () => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(action.key)}
-      className={`${card} transition-colors duration-press hover:bg-surface-hover/50`}
-    >
-      {body}
-    </button>
+    <div ref={ref} className="absolute top-3 right-3">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Pipeline options"
+        title="Pipeline options"
+        className="grid size-8 place-items-center rounded-md text-ink-3 transition-colors duration-press hover:bg-surface-hover hover:text-ink"
+      >
+        <MoreVertical size={17} strokeWidth={2} aria-hidden />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          aria-label="Pipeline options"
+          className="absolute top-full right-0 z-30 mt-1 w-48 rounded-lg bg-surface py-1 shadow-dialog"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            disabled
+            className="flex w-full cursor-not-allowed items-center gap-2.5 px-3 py-2 text-left text-label text-ink-3 opacity-60"
+          >
+            <SlidersHorizontal size={15} strokeWidth={2} aria-hidden />
+            <span className="flex-1">Manage pipeline</span>
+            <span className="rounded bg-surface-hover px-1.5 py-0.5 text-micro font-medium">Soon</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              onCreatePipeline()
+            }}
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-label text-ink hover:bg-surface-hover"
+          >
+            <Plus size={15} strokeWidth={2} aria-hidden />
+            Create pipeline
+          </button>
+        </div>
+      )}
+    </div>
   )
 }

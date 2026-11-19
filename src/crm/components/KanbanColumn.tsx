@@ -9,6 +9,8 @@ export interface KanbanColumnProps {
   /** 1-based position, shown as "01". */
   index: number
   deals: CrmDeal[]
+  /** The stage's true count when only some cards are loaded; defaults to `deals.length`. */
+  total?: number
   /** All deals on the board, for the share bar under the header. */
   boardTotal: number
   selectable: boolean
@@ -25,6 +27,7 @@ export const KanbanColumn = memo(function KanbanColumn({
   stage,
   index,
   deals,
+  total,
   boardTotal,
   selectable,
   selectedIds,
@@ -36,7 +39,8 @@ export const KanbanColumn = memo(function KanbanColumn({
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
   const ids = useMemo(() => deals.map((deal) => deal.id), [deals])
-  const share = boardTotal ? Math.round((deals.length / boardTotal) * 100) : 0
+  const count = total ?? deals.length
+  const share = boardTotal ? Math.round((count / boardTotal) * 100) : 0
   const headingId = `stage-${stage.id}-heading`
 
   return (
@@ -55,9 +59,9 @@ export const KanbanColumn = memo(function KanbanColumn({
           </h2>
           <span
             className="min-w-6 rounded-md bg-surface-hover px-1.5 py-0.5 text-center text-caption font-semibold text-ink tabular-nums"
-            aria-label={`${deals.length} ${deals.length === 1 ? 'deal' : 'deals'}`}
+            aria-label={`${count} ${count === 1 ? 'deal' : 'deals'}`}
           >
-            {deals.length}
+            {count}
           </span>
         </div>
         <div
