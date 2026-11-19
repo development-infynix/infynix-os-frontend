@@ -1,6 +1,25 @@
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type Announcements,
+  type DragEndEvent,
+  type Modifier,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Check, Handshake, Layers, Plus, Trash2, Users, X } from 'lucide-react'
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { Check, GripVertical, Handshake, Layers, Pencil, Plus, Trash2, Users, X } from 'lucide-react'
+import { forwardRef, useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/Button'
 import { FormError, FormField } from '@/components/FormField'
 import { ApiError } from '@/lib/api'
@@ -24,16 +43,12 @@ type Step = 1 | 2 | 3
 
 const DEFAULT_TEMPLATE: PipelineTemplateKey = 'sales'
 
+/** Stages only move up and down. */
+const verticalOnly: Modifier = ({ transform }) => ({ ...transform, x: 0 })
+
 let stageKey = 0
 const draftStage = (name: string): DraftStage => ({ key: `stage-${++stageKey}`, name })
 const draftStages = (names: string[]) => names.map(draftStage)
-
-function uniqueStageName(stages: DraftStage[]): string {
-  const taken = new Set(stages.map((stage) => stage.name.trim().toLowerCase()))
-  let number = stages.length + 1
-  while (taken.has(`stage ${number}`)) number += 1
-  return `Stage ${number}`
-}
 
 /**
  * Create a pipeline from a template, then rename, add, remove or reorder its
@@ -43,6 +58,12 @@ function uniqueStageName(stages: DraftStage[]): string {
 export function AddPipelineDrawer({ open, onOpenChange, onCreated }: AddPipelineDrawerProps) {
   const queryClient = useQueryClient()
   const ref = useRef<HTMLDialogElement>(null)
+  // The dialog element in state too, for the drag announcer's container (refs can't be read in render).
+  const [dialogEl, setDialogEl] = useState<HTMLDialogElement | null>(null)
+  const attachDialog = useCallback((node: HTMLDialogElement | null) => {
+    ref.current = node
+    setDialogEl(node)
+  }, [])
   const nameRef = useRef<HTMLInputElement>(null)
   const titleId = useId()
   const descriptionId = useId()
@@ -58,6 +79,16 @@ export function AddPipelineDrawer({ open, onOpenChange, onCreated }: AddPipeline
   const [saving, setSaving] = useState(false)
   /** Set by the first change. While configuring, a click on the scrim doesn't close the drawer. */
   const [configuring, setConfiguring] = useState(false)
+  /** Step 2: the "Add stage" field, its error, and the stage being renamed (one at a time). */
+  const [newStageName, setNewStageName] = useState('')
+  const [newStageError, setNewStageError] = useState<string | null>(null)
+  const [editingKey, setEditingKey] = useState<string | null>(null)
+  const newStageRef = useRef<HTMLInputElement>(null)
+  const stageSensors = useSensors(
+    // A few pixels before a drag starts, so a click on the handle stays a click.
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
 
   // Start over each time the drawer opens. Done during render (not in an
   // effect) so the fresh wizard is what slides in, never last time's step.
@@ -73,6 +104,9 @@ export function AddPipelineDrawer({ open, onOpenChange, onCreated }: AddPipeline
       setStages(draftStages(fresh.stages))
       setError(null)
       setConfiguring(false)
+      setNewStageName('')
+      setNewStageError(null)
+      setEditingKey(null)
     }
   }
 
@@ -103,34 +137,75 @@ export function AddPipelineDrawer({ open, onOpenChange, onCreated }: AddPipeline
     setConfiguring(true)
   }
 
-  function setStageName(index: number, value: string) {
-    setStages((current) => current.map((stage, i) => (i === index ? { ...stage, name: value } : stage)))
-    setError(null)
-    setConfiguring(true)
+  /** Empty, or the same as another stage (case-insensitive). `exceptKey` skips the stage being renamed. */
+  function stageNameProblem(value: string, exceptKey?: string): string | null {
+    const wanted = value.trim().toLowerCase()
+    if (!wanted) return 'Enter a stage name.'
+    if (stages.some((stage) => stage.key !== exceptKey && stage.name.trim().toLowerCase() === wanted)) {
+      return 'A stage with that name already exists.'
+    }
+    return null
   }
 
-  function moveStage(index: number, direction: -1 | 1) {
-    const target = index + direction
-    if (target < 0 || target >= stages.length) return
+  /** Saves a rename. Returns the problem instead when the name can't be used. */
+  function renameStage(key: string, value: string): string | null {
+    const problem = stageNameProblem(value, key)
+    if (problem) return problem
+    setStages((current) => current.map((stage) => (stage.key === key ? { ...stage, name: value.trim() } : stage)))
+    setEditingKey(null)
+    setError(null)
+    setConfiguring(true)
+    return null
+  }
+
+  /** Drag and drop: puts the dragged stage where it was dropped. */
+  function onStageDragEnd({ active, over }: DragEndEvent) {
+    if (!over || active.id === over.id) return
     setStages((current) => {
-      const next = [...current]
-      ;[next[index], next[target]] = [next[target], next[index]]
-      return next
+      const from = current.findIndex((stage) => stage.key === active.id)
+      const to = current.findIndex((stage) => stage.key === over.id)
+      return from < 0 || to < 0 ? current : arrayMove(current, from, to)
     })
     setConfiguring(true)
   }
 
-  function removeStage(index: number) {
+  const stageLabel = (key: string | number) => {
+    const index = stages.findIndex((stage) => stage.key === key)
+    return stages[index]?.name.trim() || `Stage ${index + 1}`
+  }
+  const position = (key: string | number) => stages.findIndex((stage) => stage.key === key) + 1
+  const stageAnnouncements: Announcements = {
+    onDragStart: ({ active }) =>
+      `Picked up ${stageLabel(active.id)}, position ${position(active.id)} of ${stages.length}.`,
+    onDragOver: ({ active, over }) =>
+      over ? `${stageLabel(active.id)} moved to position ${position(over.id)} of ${stages.length}.` : undefined,
+    onDragEnd: ({ active, over }) =>
+      over ? `Dropped ${stageLabel(active.id)} at position ${position(over.id)} of ${stages.length}.` : undefined,
+    onDragCancel: ({ active }) => `Cancelled. ${stageLabel(active.id)} is back where it was.`,
+  }
+
+  function removeStage(key: string) {
     if (stages.length === 1) return
-    setStages((current) => current.filter((_, i) => i !== index))
+    setStages((current) => current.filter((stage) => stage.key !== key))
+    if (editingKey === key) setEditingKey(null)
     setError(null)
     setConfiguring(true)
   }
 
+  /** The "Add stage" field: appends the stage, then clears and refocuses the field for the next one. */
   function addStage() {
-    setStages((current) => [...current, draftStage(uniqueStageName(current))])
+    const problem = stageNameProblem(newStageName)
+    if (problem) {
+      setNewStageError(problem)
+      newStageRef.current?.focus()
+      return
+    }
+    setStages((current) => [...current, draftStage(newStageName.trim())])
+    setNewStageName('')
+    setNewStageError(null)
     setError(null)
     setConfiguring(true)
+    newStageRef.current?.focus()
   }
 
   /** Empty, or already used by another pipeline (case-insensitive, like the server). */
@@ -219,7 +294,7 @@ export function AddPipelineDrawer({ open, onOpenChange, onCreated }: AddPipeline
 
   return (
     <dialog
-      ref={ref}
+      ref={attachDialog}
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
       aria-busy={saving || undefined}
@@ -370,60 +445,95 @@ export function AddPipelineDrawer({ open, onOpenChange, onCreated }: AddPipeline
                 </div>
               </div>
             ) : step === 2 ? (
-              <div>
+              <div className="flex flex-col gap-4">
                 <div className="flex items-end justify-between gap-3">
                   <div>
                     <h3 className="text-body font-semibold text-ink">Stages in order</h3>
                     <p className="mt-0.5 text-label text-ink-2">
-                      Rename them, add or remove a stage, and put them in the order your team works.
+                      Add, rename or remove stages, and drag them into the order your team works.
                     </p>
                   </div>
                   <span className="shrink-0 text-caption text-ink-3 tabular-nums">{stages.length} stages</span>
                 </div>
 
-                <ul className="mt-3 flex flex-col gap-2" aria-label="Pipeline stages">
-                  {stages.map((stage, index) => (
-                    <li key={stage.key} className="flex items-center gap-1.5 rounded-lg bg-surface p-1.5 ring-1 ring-line">
-                      <span className="grid size-7 shrink-0 place-items-center rounded-md bg-surface-hover text-caption font-semibold text-ink-2 tabular-nums">
-                        {index + 1}
-                      </span>
-                      <input
-                        aria-label={`Stage ${index + 1} name`}
-                        maxLength={80}
-                        value={stage.name}
-                        onChange={(event) => setStageName(index, event.target.value)}
-                        className="field-input h-9 min-w-0 flex-1"
-                      />
-                      <IconButton
-                        label={`Move ${stage.name || `stage ${index + 1}`} up`}
-                        onClick={() => moveStage(index, -1)}
-                        disabled={index === 0}
-                      >
-                        <ArrowUp size={15} strokeWidth={2} aria-hidden />
-                      </IconButton>
-                      <IconButton
-                        label={`Move ${stage.name || `stage ${index + 1}`} down`}
-                        onClick={() => moveStage(index, 1)}
-                        disabled={index === stages.length - 1}
-                      >
-                        <ArrowDown size={15} strokeWidth={2} aria-hidden />
-                      </IconButton>
-                      <IconButton
-                        label={`Remove ${stage.name || `stage ${index + 1}`}`}
-                        onClick={() => removeStage(index)}
-                        disabled={stages.length === 1}
-                        danger
-                      >
-                        <Trash2 size={15} strokeWidth={2} aria-hidden />
-                      </IconButton>
-                    </li>
-                  ))}
-                </ul>
+                <div className="rounded-xl bg-surface p-3 ring-1 ring-line">
+                  <label htmlFor="add-stage-name" className="text-label text-ink-2">
+                    Add stage
+                  </label>
+                  <div className="mt-1.5 flex gap-2">
+                    <input
+                      ref={newStageRef}
+                      id="add-stage-name"
+                      maxLength={80}
+                      value={newStageName}
+                      onChange={(event) => {
+                        setNewStageName(event.target.value)
+                        setNewStageError(null)
+                      }}
+                      onKeyDown={(event) => {
+                        // Enter adds the stage here; it must not submit the wizard (Next).
+                        if (event.key !== 'Enter') return
+                        event.preventDefault()
+                        addStage()
+                      }}
+                      placeholder="New stage name"
+                      aria-invalid={!!newStageError}
+                      aria-describedby={newStageError ? 'add-stage-error' : undefined}
+                      className="field-input h-9 min-w-0 flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={addStage}
+                      disabled={!newStageName.trim()}
+                      aria-label="Add stage"
+                      title="Add stage"
+                      className="w-9 shrink-0 px-0!"
+                    >
+                      <Plus size={17} strokeWidth={2.25} aria-hidden />
+                    </Button>
+                  </div>
+                  {newStageError && (
+                    <p id="add-stage-error" className="mt-1.5 text-caption text-danger">
+                      {newStageError}
+                    </p>
+                  )}
+                </div>
 
-                <Button type="button" variant="secondary" onClick={addStage} className="mt-2 w-full">
-                  <Plus size={16} strokeWidth={2} aria-hidden />
-                  Add stage
-                </Button>
+                <DndContext
+                  sensors={stageSensors}
+                  collisionDetection={closestCenter}
+                  modifiers={[verticalOnly]}
+                  onDragEnd={onStageDragEnd}
+                  accessibility={{
+                    // Inside the dialog: a modal dialog makes the rest of the page inert, so a
+                    // live region left on <body> would never be read out.
+                    container: dialogEl ?? undefined,
+                    announcements: stageAnnouncements,
+                    screenReaderInstructions: {
+                      draggable:
+                        'To move a stage, press Space or Enter on its handle. Use the up and down arrow keys to move it, Space or Enter to drop it, or Escape to cancel.',
+                    },
+                  }}
+                >
+                  <SortableContext items={stages.map((stage) => stage.key)} strategy={verticalListSortingStrategy}>
+                    <ul className="flex flex-col gap-2" aria-label="Pipeline stages">
+                      {stages.map((stage, index) => (
+                        <SortableStageRow
+                          key={stage.key}
+                          stage={stage}
+                          index={index}
+                          count={stages.length}
+                          editing={editingKey === stage.key}
+                          onStartEdit={() => setEditingKey(stage.key)}
+                          onRename={(value) => renameStage(stage.key, value)}
+                          onCancelEdit={() => setEditingKey(null)}
+                          onRemove={() => removeStage(stage.key)}
+                        />
+                      ))}
+                    </ul>
+                  </SortableContext>
+                </DndContext>
               </div>
             ) : (
               <div className="flex flex-col gap-6">
@@ -506,21 +616,145 @@ export function AddPipelineDrawer({ open, onOpenChange, onCreated }: AddPipeline
   )
 }
 
-function IconButton({
-  label,
-  onClick,
-  disabled = false,
-  danger = false,
-  children,
+/**
+ * One stage in step 2: drag handle, number, name, then rename and remove.
+ * Rename swaps the name for a field: Enter or leaving the field saves,
+ * Escape cancels (and doesn't close the drawer).
+ */
+function SortableStageRow({
+  stage,
+  index,
+  count,
+  editing,
+  onStartEdit,
+  onRename,
+  onCancelEdit,
+  onRemove,
 }: {
-  label: string
-  onClick: () => void
-  disabled?: boolean
-  danger?: boolean
-  children: ReactNode
+  stage: DraftStage
+  index: number
+  count: number
+  editing: boolean
+  onStartEdit: () => void
+  /** Returns the problem when the name can't be used; the field then stays open. */
+  onRename: (value: string) => string | null
+  onCancelEdit: () => void
+  onRemove: () => void
 }) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+    id: stage.key,
+    disabled: editing,
+  })
+  const [draft, setDraft] = useState(stage.name)
+  const [problem, setProblem] = useState<string | null>(null)
+  const editButtonRef = useRef<HTMLButtonElement>(null)
+  const wasEditing = useRef(editing)
+  const errorId = `${stage.key}-error`
+  const label = stage.name.trim() || `stage ${index + 1}`
+
+  // Opening the field starts from the current name; closing it hands focus back to the pencil.
+  useEffect(() => {
+    if (editing && !wasEditing.current) {
+      setDraft(stage.name)
+      setProblem(null)
+    }
+    if (!editing && wasEditing.current) editButtonRef.current?.focus()
+    wasEditing.current = editing
+  }, [editing, stage.name])
+
+  function save() {
+    setProblem(onRename(draft))
+  }
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={`relative rounded-lg bg-surface px-2 py-2 ring-1 ${
+        isDragging ? 'z-10 shadow-dialog ring-line-strong' : 'ring-line'
+      }`}
+    >
+      <div className="flex min-h-9 items-center gap-2">
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          aria-label={`Drag ${label} to reorder`}
+          title="Drag to reorder"
+          disabled={editing}
+          className={`grid h-8 w-7 shrink-0 touch-none place-items-center rounded-md text-ink-3 hover:bg-surface-hover hover:text-ink disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent ${
+            isDragging ? 'cursor-grabbing' : 'cursor-grab'
+          }`}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical size={16} strokeWidth={2} aria-hidden />
+        </button>
+        <span className="w-5 shrink-0 text-right text-label text-ink-3 tabular-nums">{index + 1}</span>
+
+        {editing ? (
+          <input
+            autoFocus
+            aria-label={`Rename ${label}`}
+            maxLength={80}
+            value={draft}
+            onChange={(event) => {
+              setDraft(event.target.value)
+              setProblem(null)
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                // Save the name; don't submit the wizard.
+                event.preventDefault()
+                save()
+              } else if (event.key === 'Escape') {
+                // Cancel the rename; preventDefault keeps the dialog from closing.
+                event.preventDefault()
+                event.stopPropagation()
+                onCancelEdit()
+              }
+            }}
+            // Leaving the field saves a usable name and quietly drops one that isn't.
+            onBlur={() => {
+              if (onRename(draft)) onCancelEdit()
+            }}
+            onFocus={(event) => event.currentTarget.select()}
+            aria-invalid={!!problem}
+            aria-describedby={problem ? errorId : undefined}
+            className="field-input h-9 min-w-0 flex-1"
+          />
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-body text-ink" title={stage.name}>
+            {stage.name}
+          </span>
+        )}
+
+        {!editing && (
+          <>
+            <IconButton ref={editButtonRef} label={`Rename ${label}`} onClick={onStartEdit}>
+              <Pencil size={15} strokeWidth={2} aria-hidden />
+            </IconButton>
+            <IconButton label={`Remove ${label}`} onClick={onRemove} disabled={count === 1} danger>
+              <Trash2 size={15} strokeWidth={2} aria-hidden />
+            </IconButton>
+          </>
+        )}
+      </div>
+      {editing && problem && (
+        <p id={errorId} className="mt-1 pl-16 text-caption text-danger">
+          {problem}
+        </p>
+      )}
+    </li>
+  )
+}
+
+const IconButton = forwardRef<
+  HTMLButtonElement,
+  { label: string; onClick: () => void; disabled?: boolean; danger?: boolean; children: ReactNode }
+>(function IconButton({ label, onClick, disabled = false, danger = false, children }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
       disabled={disabled}
@@ -533,4 +767,4 @@ function IconButton({
       {children}
     </button>
   )
-}
+})
