@@ -1,13 +1,44 @@
+import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormField'
+import { SuccessState } from '@/components/SuccessState'
 import type { AddToPipelineRun } from '../useAddToPipeline'
 
 const number = new Intl.NumberFormat()
 
-/** The running, finished or failed view of an add-to-pipeline run: a progress bar and what happened. */
-export function AddToPipelineProgress({ run, where }: { run: AddToPipelineRun; where: string }) {
+/** An add-to-pipeline run: a progress bar while running or stopped, the success panel once done. */
+export function AddToPipelineProgress({
+  run,
+  where,
+  onDone,
+}: {
+  run: AddToPipelineRun
+  where: string
+  /** Shows a primary Done button under the success panel. */
+  onDone?: () => void
+}) {
   const { phase, tally, total, percent, error } = run
   if (phase === 'idle') return null
-  const label = phase === 'running' ? 'Adding clients…' : phase === 'done' ? 'All done' : 'Stopped'
+  if (phase === 'done') {
+    return (
+      <SuccessState
+        title={`Added to ${where.split(' › ')[0]}`}
+        action={
+          onDone && (
+            <Button variant="primary" onClick={onDone} className="min-w-28">
+              Done
+            </Button>
+          )
+        }
+      >
+        <p>
+          {number.format(tally.added)} {tally.added === 1 ? 'deal' : 'deals'} in {where}
+        </p>
+        {tally.alreadyInPipeline > 0 && <p>{number.format(tally.alreadyInPipeline)} already in this pipeline (skipped)</p>}
+        {tally.notFound > 0 && <p>{number.format(tally.notFound)} no longer in your directory (skipped)</p>}
+      </SuccessState>
+    )
+  }
+  const label = phase === 'running' ? 'Adding clients…' : 'Stopped'
   return (
     <div className="pb-1">
       <div className="flex items-center justify-between text-label text-ink-2">

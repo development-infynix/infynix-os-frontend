@@ -9,8 +9,11 @@ import { ImportsEmpty } from './ImportsEmpty'
 export function ClientImportsPanel({
   onViewRows,
   onImport,
+  onMoveToCrm,
 }: {
   onViewRows: (item: ClientImport) => void
+  /** Move an import's clients to a pipeline; absent without CRM access. */
+  onMoveToCrm?: (item: ClientImport, clientIds: string[]) => void
   /** Opens the spreadsheet import, from the empty state's drawing. */
   onImport?: () => void
 }) {
@@ -36,7 +39,7 @@ export function ClientImportsPanel({
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {data.map((item) => (
-            <ClientImportCard key={item.id} item={item} onViewRows={onViewRows} />
+            <ClientImportCard key={item.id} item={item} onViewRows={onViewRows} onMoveToCrm={onMoveToCrm} />
           ))}
         </ul>
       )}

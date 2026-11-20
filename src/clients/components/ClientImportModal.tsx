@@ -7,6 +7,7 @@ import type { CrmPipeline } from '@/crm/types'
 import { useAddToPipeline, type AddToPipelineRun } from '@/crm/useAddToPipeline'
 import { Button } from '@/components/Button'
 import { FormError, FormField } from '@/components/FormField'
+import { SuccessState } from '@/components/SuccessState'
 import { Modal } from '@/components/Modal'
 import {
   CLIENTS_KEY,
@@ -14,6 +15,7 @@ import {
   chunkImportRows,
   clientImportIdsQuery,
   createClientImport,
+  deleteClientImport,
   importClientsChunk,
   type ClientInput,
 } from '@/lib/clients'
@@ -37,6 +39,10 @@ interface FieldMapping {
 interface ImportResult {
   created: number
   skipped: number
+  /** Rows whose person is already in the directory (or repeated in the file): not created again. */
+  duplicates: number
+  /** The existing clients the duplicates matched: from the CRM page they still go into the pipeline. */
+  existingIds: string[]
 }
 
 function uniqueHeaders(values: unknown[]): string[] {
@@ -189,27 +195,45 @@ export function ClientImportModal({
     setProgress({ current: 0, total: payloads.length })
     let created = 0
     let skipped = invalid
+    let duplicates = 0
+    const existingIds = new Set<string>()
+    /** The import record, once registered: dropped again if the run adds nobody. */
+    let jobId: string | null = null
     try {
       const job = await createClientImport({
         name: importName.trim(),
         fileName: file.name,
         rowCount: file.rows.length,
       })
+      jobId = job.id
       // Chunks by size, not a fixed count: usually the whole file in one request.
       let sent = 0
       for (const chunk of chunkImportRows(payloads)) {
         const outcome = await importClientsChunk(job.id, chunk)
         created += outcome.created
         skipped += outcome.skipped
+        duplicates += outcome.duplicates
+        for (const id of outcome.existingClientIds) existingIds.add(id)
         sent += chunk.length
         setProgress({ current: sent, total: payloads.length })
       }
+      // An import that added nobody (every row a duplicate or invalid) isn't worth a record.
+      if (created === 0) await dropEmptyImport(job.id)
       await queryClient.invalidateQueries({ queryKey: CLIENTS_KEY })
       await queryClient.invalidateQueries({ queryKey: CLIENT_IMPORTS_KEY })
-      setResult({ created, skipped })
-      setImportId(job.id)
-      if (pipeline && created > 0) void addToPipeline(job.id)
+      const finished = { created, skipped, duplicates, existingIds: [...existingIds] }
+      setResult(finished)
+      setImportId(created > 0 ? job.id : null)
+      // With no clients of its own, only the existing clients it matched go to the pipeline.
+      if (pipeline && (created > 0 || existingIds.size > 0)) {
+        void addToPipeline(created > 0 ? job.id : '', finished.existingIds)
+      }
     } catch {
+      // Failed before adding anyone: don't leave an empty import behind either.
+      if (jobId && created === 0) {
+        await dropEmptyImport(jobId)
+        await queryClient.invalidateQueries({ queryKey: CLIENT_IMPORTS_KEY })
+      }
       setError('Couldn’t finish the import. Try again.')
       setProgress(null)
     } finally {
@@ -217,12 +241,26 @@ export function ClientImportModal({
     }
   }
 
-  /** From the CRM page: the clients this import created become deals in the pipeline. */
-  async function addToPipeline(id: string) {
+  /** Best effort: if it fails, the empty import just stays listed and can be deleted by hand. */
+  async function dropEmptyImport(id: string) {
+    try {
+      await deleteClientImport(id)
+    } catch {
+      // Ignore: nothing else depends on it.
+    }
+  }
+
+  /**
+   * From the CRM page: the clients this import created, plus the existing
+   * clients its duplicate rows matched, become deals in the pipeline. (Anyone
+   * already in the pipeline is skipped by the server.)
+   */
+  async function addToPipeline(id: string, existingIds: string[] = result?.existingIds ?? []) {
     if (!pipeline || !stage) return
     setIdsFailed(false)
     try {
-      const ids = await queryClient.fetchQuery({ ...clientImportIdsQuery(id), staleTime: 0 })
+      const created = id ? await queryClient.fetchQuery({ ...clientImportIdsQuery(id), staleTime: 0 }) : []
+      const ids = [...new Set([...created, ...existingIds])]
       pipelineRun.start(ids, { pipelineId: pipeline.id, stageId: stage.id })
     } catch {
       setIdsFailed(true)
@@ -230,11 +268,14 @@ export function ClientImportModal({
   }
 
   function retryPipeline() {
-    if (idsFailed && importId) void addToPipeline(importId)
+    if (idsFailed) void addToPipeline(importId ?? '')
     else pipelineRun.retry()
   }
 
   const pipelineFailed = idsFailed || pipelineRun.phase === 'failed'
+  /** Everything finished well: the dialog becomes just the success panel and its Done button. */
+  const pipelineNeeded = Boolean(pipeline && result && (result.created > 0 || result.existingIds.length > 0))
+  const succeeded = Boolean(result) && !importing && (!pipelineNeeded || pipelineRun.phase === 'done')
   const preview = file?.rows.slice(0, 5) ?? []
 
   return (
@@ -242,6 +283,7 @@ export function ClientImportModal({
       open={open}
       onOpenChange={(next) => (next ? onOpenChange(true) : close())}
       busy={importing || addingToPipeline}
+      bare={succeeded}
       wide
       title="Import clients"
       description={
@@ -251,9 +293,10 @@ export function ClientImportModal({
       }
     >
       <div className="flex max-h-[min(70vh,34rem)] flex-col overflow-hidden sm:max-h-[min(82vh,46rem)]">
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4">
+        <div className={`min-h-0 flex-1 overflow-y-auto px-5 ${succeeded ? 'pt-8 pb-6' : 'pt-4'}`}>
           {importing || result ? (
             <ImportRun
+              onDone={close}
               importing={importing}
               rowsSent={progress?.current ?? 0}
               rowsTotal={progress?.total ?? 0}
@@ -267,7 +310,8 @@ export function ClientImportModal({
                           ? 'failed'
                           : pipelineRun.phase === 'done'
                             ? 'done'
-                            : pipelineRun.phase === 'running' || (result && result.created > 0)
+                            : pipelineRun.phase === 'running' ||
+                                (result && (result.created > 0 || result.existingIds.length > 0))
                               ? 'running'
                               : result
                                 ? 'skipped'
@@ -391,7 +435,7 @@ export function ClientImportModal({
                   </FormField>
                 </div>
                 {pipeline && pipeline.stages.length > 0 && (
-                  <div className="mb-5">
+                  <div>
                     <StagePicker
                       stages={pipeline.stages}
                       value={stage?.id ?? null}
@@ -400,6 +444,9 @@ export function ClientImportModal({
                     />
                   </div>
                 )}
+                {/* From the CRM page the last step is about where the deals land (the stage picker above), not a preview. */}
+                {!pipeline && (
+                  <>
                 <p className="text-label text-ink-2">
                   Previewing {preview.length} of {file?.rows.length ?? 0} rows.
                 </p>
@@ -433,11 +480,14 @@ export function ClientImportModal({
                     </tbody>
                   </table>
                 </div>
+                  </>
+                )}
               </div>
             )}
           </div>
         </div>
 
+        {!succeeded && (
         <div className="mt-5 flex items-center gap-2 border-t border-line bg-canvas/60 px-5 py-3.5 [&>*]:flex-1 sm:justify-end sm:[&>*]:flex-none">
           {(result || step === 1) && (
             <Button variant="secondary" onClick={close} disabled={importing} loading={addingToPipeline}>
@@ -470,6 +520,7 @@ export function ClientImportModal({
             </Button>
           )}
         </div>
+        )}
       </div>
     </Modal>
   )
@@ -578,12 +629,15 @@ interface PipelineStep {
  * checklist of the steps with what each did. The ticked checklist is the summary.
  */
 function ImportRun({
+  onDone,
   importing,
   rowsSent,
   rowsTotal,
   result,
   pipelineStep,
 }: {
+  /** The primary Done under the success panel. */
+  onDone: () => void
   importing: boolean
   rowsSent: number
   rowsTotal: number
@@ -613,6 +667,33 @@ function ImportRun({
         : `Adding to ${pipelineStep?.where.split(' › ')[0] ?? 'the pipeline'}…`
 
   const tally = pipelineStep?.run.tally
+
+  if (finished && result) {
+    const pipelineName = pipelineStep?.where.split(' › ')[0]
+    return (
+      <SuccessState
+        title={pipelineStep && pipelineStep.state === 'done' ? `Imported and added to ${pipelineName}` : 'Import complete'}
+        action={
+          <Button variant="primary" onClick={onDone} className="min-w-28">
+            Done
+          </Button>
+        }
+      >
+        <p>
+          {number.format(result.created)} {result.created === 1 ? 'client' : 'clients'} added
+          {result.duplicates ? ` · ${number.format(result.duplicates)} already in your directory` : ''}
+          {result.skipped ? ` · ${number.format(result.skipped)} skipped` : ''}
+        </p>
+        {pipelineStep && pipelineStep.state === 'done' && tally && (
+          <p>
+            {number.format(tally.added)} {tally.added === 1 ? 'deal' : 'deals'} in {pipelineStep.where}
+            {tally.alreadyInPipeline ? ` · ${number.format(tally.alreadyInPipeline)} already there` : ''}
+          </p>
+        )}
+      </SuccessState>
+    )
+  }
+
   const addDetail = !pipelineStep
     ? ''
     : pipelineStep.state === 'waiting'
@@ -661,7 +742,13 @@ function ImportRun({
           title="Import clients"
           detail={
             result
-              ? `${number.format(result.created)} added · ${number.format(result.skipped)} skipped`
+              ? [
+                  `${number.format(result.created)} added`,
+                  result.duplicates ? `${number.format(result.duplicates)} already in your directory` : '',
+                  result.skipped ? `${number.format(result.skipped)} skipped` : '',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
               : `${number.format(rowsSent)} of ${number.format(rowsTotal)} rows`
           }
         />

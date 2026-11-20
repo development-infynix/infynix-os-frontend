@@ -159,6 +159,11 @@ export function ManagePipelinesDrawer({ open, onOpenChange }: ManagePipelinesDra
               </div>
             ) : (
               <>
+                {onlyOne && (
+                  <p className="mb-3 px-1 text-caption text-ink-3">
+                    Your company needs at least one pipeline, so the last one can’t be deleted.
+                  </p>
+                )}
                 <ul className="flex flex-col gap-2" aria-label="Pipelines">
                   {pipelines.map((pipeline) => (
                     <PipelineRow
@@ -174,11 +179,6 @@ export function ManagePipelinesDrawer({ open, onOpenChange }: ManagePipelinesDra
                     />
                   ))}
                 </ul>
-                {onlyOne && (
-                  <p className="mt-3 px-1 text-caption text-ink-3">
-                    Your company needs at least one pipeline, so the last one can’t be deleted.
-                  </p>
-                )}
               </>
             )}
           </div>

@@ -155,8 +155,19 @@ export function chunkImportRows(rows: ClientInput[]): ClientInput[][] {
 }
 
 /** One chunk of an import: build chunks with chunkImportRows. */
+/** What one import chunk did. Duplicates (same email or phone as an existing client) are not created again. */
+export interface ImportChunkResult {
+  created: number
+  /** Invalid rows: no name, no contact, or a bad email. */
+  skipped: number
+  /** Already in the directory, or repeated earlier in the file. */
+  duplicates: number
+  /** The existing clients those duplicates matched. */
+  existingClientIds: string[]
+}
+
 export const importClientsChunk = (importId: string, clients: ClientInput[]) =>
-  api<{ created: number; skipped: number }>('/clients/import', {
+  api<ImportChunkResult>('/clients/import', {
     method: 'POST',
     body: JSON.stringify({ importId, clients }),
   })

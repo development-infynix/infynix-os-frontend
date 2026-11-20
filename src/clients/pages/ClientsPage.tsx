@@ -61,6 +61,8 @@ export function ClientsPage() {
   /** The CRM button needs the CRM menu: the modal lists that person's pipelines. */
   const canUseCrm = hasAccess(useSession(), 'crm')
   const [addingToCrm, setAddingToCrm] = useState(false)
+  /** Imports tab › Move to CRM: that import's clients, separate from the Clients tab selection. */
+  const [importToCrm, setImportToCrm] = useState<string[] | null>(null)
 
   useEffect(() => {
     localStorage.setItem(TAB_STORAGE_KEY, tab)
@@ -405,6 +407,7 @@ export function ClientsPage() {
               changeImportFilter(item.id)
               setTab('clients')
             }}
+            onMoveToCrm={canUseCrm ? (_item, ids) => setImportToCrm(ids) : undefined}
           />
         </div>
       )}
@@ -415,6 +418,12 @@ export function ClientsPage() {
         onOpenChange={setAddingToCrm}
         clientIds={[...selected]}
         onDone={() => setSelected(new Set())}
+      />
+      <ClientCrmModal
+        open={importToCrm !== null}
+        onOpenChange={(open) => !open && setImportToCrm(null)}
+        clientIds={importToCrm ?? []}
+        onDone={() => {}}
       />
       <ClientImportModal open={importing} onOpenChange={setImporting} />
       <SearchClientsDialog open={searching} onOpenChange={setSearching} onSelect={viewClient} />

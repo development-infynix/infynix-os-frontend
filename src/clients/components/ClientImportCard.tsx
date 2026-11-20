@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, X } from 'lucide-react'
+import { Check, Loader2, X } from 'lucide-react'
 import { VscSettingsCompact } from 'react-icons/vsc'
 import { useEffect, useRef, useState } from 'react'
 import { AlertDialog } from '@/components/Alert'
@@ -9,6 +9,7 @@ import { ApiError } from '@/lib/api'
 import {
   CLIENTS_KEY,
   CLIENT_IMPORTS_KEY,
+  clientImportIdsQuery,
   deleteClientImport,
   deleteImportClientChunk,
   IMPORT_DELETE_CHUNK,
@@ -27,11 +28,33 @@ const failure = (error: unknown, fallback: string) =>
 export function ClientImportCard({
   item,
   onViewRows,
+  onMoveToCrm,
 }: {
   item: ClientImport
   onViewRows: (item: ClientImport) => void
+  /** Opens Add to a pipeline with this import's clients; absent without CRM access. */
+  onMoveToCrm?: (item: ClientImport, clientIds: string[]) => void
 }) {
   const queryClient = useQueryClient()
+  /** Loading the import's client ids before the pipeline modal opens. */
+  const [movePending, setMovePending] = useState(false)
+  const [moveFailed, setMoveFailed] = useState(false)
+
+  async function moveToCrm() {
+    if (!onMoveToCrm || movePending) return
+    setMovePending(true)
+    setMoveFailed(false)
+    try {
+      // Fresh every time: clients may have been deleted from the import since.
+      const ids = await queryClient.fetchQuery({ ...clientImportIdsQuery(item.id), staleTime: 0 })
+      setMenuOpen(false)
+      onMoveToCrm(item, ids)
+    } catch {
+      setMoveFailed(true)
+    } finally {
+      setMovePending(false)
+    }
+  }
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(item.name)
@@ -177,7 +200,7 @@ export function ClientImportCard({
             <div
               role="menu"
               aria-label={`${item.name} actions`}
-              className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-lg bg-surface py-1 shadow-dialog"
+              className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-lg bg-surface py-1 shadow-dialog"
             >
               <button
                 type="button"
@@ -186,11 +209,30 @@ export function ClientImportCard({
                   setMenuOpen(false)
                   startRename()
                 }}
-                className="flex w-full px-3 py-2 text-left text-body text-ink-2 hover:bg-surface-hover hover:text-ink"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-body hover:bg-surface-hover text-ink"
               >
                 Rename
               </button>
-              <div className="my-1 border-t border-line" />
+              {onMoveToCrm && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => void moveToCrm()}
+                  disabled={movePending || item.createdCount === 0}
+                  title={item.createdCount === 0 ? 'This import has no clients left' : undefined}
+                  aria-busy={movePending || undefined}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-body hover:bg-surface-hover text-ink disabled:cursor-not-allowed disabled:text-ink-3 disabled:hover:bg-transparent"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block">Move to CRM</span>
+                    {moveFailed && (
+                      <span className="block text-caption text-danger">Couldn’t load its clients. Try again.</span>
+                    )}
+                  </span>
+                  {movePending && <Loader2 size={15} className="shrink-0 animate-spin text-ink-3" aria-hidden />}
+                </button>
+              )}
+              <div role="separator" className="my-1 border-t border-line" />
               <button
                 type="button"
                 role="menuitem"
@@ -198,18 +240,9 @@ export function ClientImportCard({
                   setMenuOpen(false)
                   setConfirmDelete(true)
                 }}
-                className="flex w-full px-3 py-2 text-left text-body text-danger hover:bg-surface-hover"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-body hover:bg-surface-hover text-danger"
               >
                 Delete
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                disabled
-                title="Coming soon"
-                className="flex w-full cursor-not-allowed px-3 py-2 text-left text-body text-ink-3 opacity-50"
-              >
-                Move to CRM
               </button>
             </div>
           )}

@@ -92,6 +92,8 @@ export function CrmPage() {
   const [viewing, setViewing] = useState<CrmDeal | null>(null)
   const [pendingJump, setPendingJump] = useState<string | null>(null)
   const [moveError, setMoveError] = useState<string | null>(null)
+  /** A short note after Add deal used a client already in the directory. */
+  const [notice, setNotice] = useState<string | null>(null)
   const [scroll, setScroll] = useState<BoardScrollState>({ canPrev: false, canNext: false })
   const board = useRef<KanbanBoardHandle>(null)
 
@@ -117,6 +119,13 @@ export function CrmPage() {
       list.some((item) => item.id === selectedPipelineId) ? selectedPipelineId : list[0].id,
     )
   }, [pipelinesQuery.data, selectedPipelineId])
+
+  // The note fades on its own.
+  useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(null), 6000)
+    return () => window.clearTimeout(timer)
+  }, [notice])
 
   // A search result's highlight fades after a moment.
   useEffect(() => {
@@ -484,6 +493,14 @@ export function CrmPage() {
               />
             ) : (
               <>
+                {notice && (
+                  <div
+                    role="status"
+                    className="mb-3 rounded-lg bg-secondary-soft px-3 py-2.5 text-label text-secondary-text"
+                  >
+                    {notice}
+                  </div>
+                )}
                 {moveError && (
                   <div
                     role="alert"
@@ -550,7 +567,10 @@ export function CrmPage() {
           pipelineName={pipeline?.name ?? 'this pipeline'}
           stageId={firstStage?.id}
           stageName={firstStage?.name ?? 'the first stage'}
-          onAdded={(deal) => setPendingJump(deal.id)}
+          onAdded={(deal) => {
+            setPendingJump(deal.id)
+            setNotice(deal.existingClient ? `${deal.name} was already a client, so they were added as a deal.` : null)
+          }}
         />
         <ManageStageDrawer
           open={managingStages}

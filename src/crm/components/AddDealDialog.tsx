@@ -5,9 +5,8 @@ import { FormError, FormField } from '@/components/FormField'
 import { Modal, ModalFooter } from '@/components/Modal'
 import { ApiError } from '@/lib/api'
 import { CLIENTS_KEY, emptyDetailRows, rowsToDetails, type CustomDetailRow } from '@/lib/clients'
-import { createCrmDeal, CRM_KEY } from '@/lib/crm'
+import { createCrmDeal, CRM_KEY, type CreatedCrmDeal } from '@/lib/crm'
 import { CustomDetailsEditor } from '@/clients/components/CustomDetailsEditor'
-import type { CrmDeal } from '../types'
 
 interface AddDealDialogProps {
   open: boolean
@@ -17,7 +16,7 @@ interface AddDealDialogProps {
   /** The current pipeline's first stage; the server would default to it anyway. */
   stageId?: string
   stageName: string
-  onAdded: (deal: CrmDeal) => void
+  onAdded: (deal: CreatedCrmDeal) => void
 }
 
 interface FieldErrors {

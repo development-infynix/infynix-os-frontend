@@ -11,6 +11,8 @@ export interface ModalProps {
   busy?: boolean
   /** Wider sheet for content like import wizards and preview tables. */
   wide?: boolean
+  /** No header bar (e.g. a finished run's success panel): the title stays for screen readers. */
+  bare?: boolean
 }
 
 /**
@@ -18,7 +20,16 @@ export interface ModalProps {
  * focus is trapped while open and returns to the trigger, Escape closes, and
  * it renders above everything. Put the form, with its own buttons, inside.
  */
-export function Modal({ open, onOpenChange, title, description, children, busy = false, wide = false }: ModalProps) {
+export function Modal({
+  open,
+  onOpenChange,
+  title,
+  description,
+  children,
+  busy = false,
+  wide = false,
+  bare = false,
+}: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const descId = useId()
@@ -36,7 +47,7 @@ export function Modal({ open, onOpenChange, title, description, children, busy =
     <dialog
       ref={ref}
       aria-labelledby={titleId}
-      aria-describedby={description ? descId : undefined}
+      aria-describedby={description && !bare ? descId : undefined}
       onCancel={(e) => {
         e.preventDefault()
         close()
@@ -46,7 +57,15 @@ export function Modal({ open, onOpenChange, title, description, children, busy =
         wide ? 'sm:max-w-[44rem]' : 'max-w-dialog'
       }`}
     >
-      {open && (
+      {open && bare && (
+        <>
+          <h2 id={titleId} className="sr-only">
+            {title}
+          </h2>
+          {children}
+        </>
+      )}
+      {open && !bare && (
         <>
           <div className="flex items-start gap-3 px-5 pt-5">
             <div className="min-w-0 flex-1">

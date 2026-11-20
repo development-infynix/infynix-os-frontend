@@ -162,9 +162,15 @@ export interface CreateDealInput {
   customDetails?: Record<string, unknown>
 }
 
-/** Adds a client (unless `clientId` is given) and its deal in one transaction. */
+/** A new deal; `existingClient` when the form's email or phone already belonged to a client, which was used instead. */
+export type CreatedCrmDeal = CrmDeal & { existingClient: boolean }
+
+/**
+ * Adds a client (unless `clientId` is given) and its deal in one transaction.
+ * A client already in the directory (same email or phone) is reused, never copied.
+ */
 export const createCrmDeal = (input: CreateDealInput) =>
-  api<CrmDeal>('/crm/deals', { method: 'POST', body: JSON.stringify(input) })
+  api<CreatedCrmDeal>('/crm/deals', { method: 'POST', body: JSON.stringify(input) })
 
 /** Shared by every card move, so the board can tell when the last pending one has finished. */
 export const CRM_MOVE_KEY = [...CRM_KEY, 'move-deal'] as const

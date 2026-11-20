@@ -118,7 +118,7 @@ export function AddFromImportsDrawer({ open, onOpenChange, pipeline }: AddFromIm
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-canvas px-5 py-5">
+        <div className="flex flex-1 flex-col overflow-y-auto bg-canvas px-5 py-5">
           {choosing ? (
             <div className="flex flex-col gap-6">
               <div>
@@ -137,10 +137,11 @@ export function AddFromImportsDrawer({ open, onOpenChange, pipeline }: AddFromIm
               <StagePicker stages={pipeline.stages} value={stage?.id ?? null} onChange={setStageId} />
             </div>
           ) : (
-            <AddToPipelineProgress run={run} where={where} />
+            <AddToPipelineProgress run={run} where={where} onDone={close} />
           )}
         </div>
 
+        {run.phase !== 'done' && (
         <div className="flex justify-end gap-2 border-t border-line bg-canvas/60 px-5 py-3.5">
           {choosing ? (
             <>
@@ -170,6 +171,7 @@ export function AddFromImportsDrawer({ open, onOpenChange, pipeline }: AddFromIm
             </Button>
           )}
         </div>
+        )}
       </div>
     </dialog>
   )

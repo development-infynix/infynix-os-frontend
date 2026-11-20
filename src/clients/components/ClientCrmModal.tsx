@@ -68,6 +68,7 @@ export function ClientCrmModal({ open, onOpenChange, clientIds, onDone }: Client
       open={open}
       onOpenChange={onOpenChange}
       busy={running}
+      bare={run.phase === 'done'}
       title="Add to a pipeline"
       description={
         choosing
@@ -76,7 +77,7 @@ export function ClientCrmModal({ open, onOpenChange, clientIds, onDone }: Client
       }
     >
       <div className="flex flex-col">
-        <div className="max-h-[min(60vh,30rem)] overflow-y-auto px-5 pt-5">
+        <div className={`max-h-[min(60vh,30rem)] overflow-y-auto px-5 ${run.phase === 'done' ? 'pt-8 pb-6' : 'pt-5'}`}>
           {choosing ? (
             pipelinesQuery.isPending ? (
               <div className="grid place-items-center py-8">
@@ -108,10 +109,11 @@ export function ClientCrmModal({ open, onOpenChange, clientIds, onDone }: Client
               </div>
             )
           ) : (
-            <AddToPipelineProgress run={run} where={where} />
+            <AddToPipelineProgress run={run} where={where} onDone={() => onOpenChange(false)} />
           )}
         </div>
 
+        {run.phase !== 'done' && (
         <ModalFooter>
           {choosing ? (
             <>
@@ -137,6 +139,7 @@ export function ClientCrmModal({ open, onOpenChange, clientIds, onDone }: Client
             </Button>
           )}
         </ModalFooter>
+        )}
       </div>
     </Modal>
   )
