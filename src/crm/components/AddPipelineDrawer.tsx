@@ -355,12 +355,15 @@ export function AddPipelineDrawer({ open, onOpenChange, onCreated }: AddPipeline
       aria-busy={saving || undefined}
       // Escape: the browser's cancel. Kept as a way out while configuring; blocked while saving.
       onCancel={(event) => {
+        // A dialog opened inside this one (a confirmation) sends its own close/cancel up through React: ignore it.
+        if (event.target !== event.currentTarget) return
         event.preventDefault()
         close()
       }}
       // The browser can force-close the dialog itself (Escape pressed twice). Mid-save that
       // would hide the result, so reopen it; otherwise keep the page's state in step.
-      onClose={() => {
+      onClose={(event) => {
+        if (event.target !== event.currentTarget) return
         if (saving) ref.current?.showModal()
         else if (open) onOpenChange(false)
       }}

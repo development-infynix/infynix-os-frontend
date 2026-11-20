@@ -49,6 +49,8 @@ export function Modal({
       aria-labelledby={titleId}
       aria-describedby={description && !bare ? descId : undefined}
       onCancel={(e) => {
+        // A dialog opened inside this one (a confirmation) sends its own close/cancel up through React: ignore it.
+        if (e.target !== e.currentTarget) return
         e.preventDefault()
         close()
       }}

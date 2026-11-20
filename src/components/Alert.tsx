@@ -122,6 +122,8 @@ export function AlertDialog({
       aria-busy={pending}
       // Escape: route through React state instead of letting the browser close it.
       onCancel={(e) => {
+        // A dialog opened inside this one (a confirmation) sends its own close/cancel up through React: ignore it.
+        if (e.target !== e.currentTarget) return
         e.preventDefault()
         dismiss()
       }}

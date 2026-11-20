@@ -1,10 +1,15 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { History, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Detail, Muted, Panel } from '@/components/DetailPanel'
 import { showDetailValue } from '@/lib/detail-value'
 import { ApiError } from '@/lib/api'
-import { crmDealQuery } from '@/lib/crm'
+import {
+  CRM_KEY,
+  crmAssignmentQuery,
+  crmDealQuery,
+  setCrmDealOwner,
+} from '@/lib/crm'
 import type { CrmDeal, CrmStage } from '../types'
 
 type Tab = 'details' | 'history'
@@ -14,6 +19,8 @@ interface DealDetailsDrawerProps {
   deal: CrmDeal | null
   pipelineName: string
   stages: CrmStage[]
+  /** Owner and managers can pick the deal's owner here; others just see it. */
+  canManage?: boolean
   onClose: () => void
 }
 
@@ -24,7 +31,7 @@ const dateFormat = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: '
  * in the pipeline, when it was added, and the client's fields. History lists
  * what happened to it since it entered the pipeline (not recorded yet).
  */
-export function DealDetailsDrawer({ deal, pipelineName, stages, onClose }: DealDetailsDrawerProps) {
+export function DealDetailsDrawer({ deal, pipelineName, stages, canManage = false, onClose }: DealDetailsDrawerProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const tabsId = useId()
@@ -66,6 +73,8 @@ export function DealDetailsDrawer({ deal, pipelineName, stages, onClose }: DealD
       ref={ref}
       aria-labelledby={titleId}
       onCancel={(event) => {
+        // A dialog opened inside this one (a confirmation) sends its own close/cancel up through React: ignore it.
+        if (event.target !== event.currentTarget) return
         event.preventDefault()
         onClose()
       }}
@@ -129,6 +138,9 @@ export function DealDetailsDrawer({ deal, pipelineName, stages, onClose }: DealD
                     )}
                   </Detail>
                   <Detail label="Pipeline">{pipelineName}</Detail>
+                  <Detail label="Owner">
+                    <OwnerPicker deal={shown} canManage={canManage && !gone} />
+                  </Detail>
                   <Detail label="Added">
                     <span className="tabular-nums">{dateFormat.format(new Date(shown.addedAt))}</span>
                   </Detail>
@@ -194,5 +206,57 @@ function TabButton({ id, controls, selected, onSelect, children }: TabButtonProp
     >
       {children}
     </button>
+  )
+}
+
+/**
+ * The deal's owner. People who can manage pick from those who can own deals
+ * in this pipeline (or Unassigned); the pick is recorded as manual.
+ */
+function OwnerPicker({ deal, canManage }: { deal: CrmDeal; canManage: boolean }) {
+  const queryClient = useQueryClient()
+  const people = useQuery({ ...crmAssignmentQuery(deal.pipelineId), enabled: canManage })
+  const [saving, setSaving] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+
+  if (!canManage) return deal.ownerName ? <span>{deal.ownerName}</span> : <Muted>Unassigned</Muted>
+
+  const eligible = (people.data?.people ?? []).filter((person) => person.eligible)
+  // Keep the current owner listed even if they can't receive new deals any more.
+  const current = deal.ownerId && !eligible.some((p) => p.userId === deal.ownerId)
+    ? [{ userId: deal.ownerId, fullName: deal.ownerName ?? 'Current owner' }]
+    : []
+
+  async function change(ownerId: string | null) {
+    setSaving(true)
+    setProblem(null)
+    try {
+      await setCrmDealOwner(deal.id, ownerId)
+      await queryClient.invalidateQueries({ queryKey: CRM_KEY })
+    } catch (caught) {
+      setProblem(caught instanceof ApiError && caught.status !== 500 ? caught.message : 'Couldn’t change the owner.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div>
+      <select
+        aria-label="Deal owner"
+        value={deal.ownerId ?? ''}
+        disabled={saving || people.isPending}
+        onChange={(event) => void change(event.target.value || null)}
+        className="field-input h-9 py-0"
+      >
+        <option value="">Unassigned</option>
+        {[...current, ...eligible].map((person) => (
+          <option key={person.userId} value={person.userId}>
+            {person.fullName}
+          </option>
+        ))}
+      </select>
+      {problem && <p className="mt-1 text-caption text-danger">{problem}</p>}
+    </div>
   )
 }

@@ -29,6 +29,7 @@ import {
 } from '@/lib/crm'
 import { AddDealDialog } from '../components/AddDealDialog'
 import { AddFromImportsDrawer } from '../components/AddFromImportsDrawer'
+import { AssignDealsDrawer } from '../components/assign/AssignDealsDrawer'
 import { CrmActions } from '../components/CrmActions'
 import { DealDetailsDrawer } from '../components/DealDetailsDrawer'
 import { AddPipelineDrawer } from '../components/AddPipelineDrawer'
@@ -83,6 +84,7 @@ export function CrmPage() {
   const [searching, setSearching] = useState(false)
   const [adding, setAdding] = useState(false)
   const [addingFromImports, setAddingFromImports] = useState(false)
+  const [assigningDeals, setAssigningDeals] = useState(false)
   const [importingData, setImportingData] = useState(false)
   const [creatingPipeline, setCreatingPipeline] = useState(false)
   const [managingPipelines, setManagingPipelines] = useState(false)
@@ -542,6 +544,7 @@ export function CrmPage() {
               onManagePipelines={() => setManagingPipelines(true)}
               onCreatePipeline={() => setCreatingPipeline(true)}
               onManageStages={canManage && pipeline ? () => setManagingStages(true) : undefined}
+              onAssignDeals={pipeline ? () => setAssigningDeals(true) : undefined}
               hasPipelines={pipelines.length > 0}
             />
           </div>
@@ -558,6 +561,7 @@ export function CrmPage() {
           deal={viewing}
           pipelineName={pipeline?.name ?? 'this pipeline'}
           stages={stages}
+          canManage={canManage}
           onClose={() => setViewing(null)}
         />
         <AddDealDialog
@@ -577,6 +581,14 @@ export function CrmPage() {
           onOpenChange={setManagingStages}
           pipelineId={activePipelineId}
         />
+        {pipeline && (
+          <AssignDealsDrawer
+            open={assigningDeals}
+            onOpenChange={setAssigningDeals}
+            pipeline={{ ...pipeline, stages }}
+            canManage={canManage}
+          />
+        )}
         {pipeline && canUseClients && (
           <>
             <AddFromImportsDrawer

@@ -103,6 +103,8 @@ export function UserDetailsDrawer({ member, onClose, roles, isSelf }: UserDetail
         ref={ref}
         aria-labelledby={titleId}
         onCancel={(e) => {
+          // A dialog opened inside this one (a confirmation) sends its own close/cancel up through React: ignore it.
+          if (e.target !== e.currentTarget) return
           e.preventDefault()
           close()
         }}

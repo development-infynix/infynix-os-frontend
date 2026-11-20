@@ -1,5 +1,5 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query'
-import type { BoardColumns, CrmDeal, CrmPipeline, CrmStage } from '@/crm/types'
+import type { AssignmentRule, BoardColumns, CrmDeal, CrmPipeline, CrmStage } from '@/crm/types'
 import { api } from './api'
 
 /** Every CRM query starts with this key: invalidate it after a change. */
@@ -218,6 +218,120 @@ export const crmPipelineDeleteImpactQuery = (id: string) =>
 
 /** Deletes the pipeline with its deals, stages and access list. Clients stay. */
 export const deleteCrmPipeline = (id: string) => api<void>(`/crm/pipelines/${id}`, { method: 'DELETE' })
+
+/* ── Deal assignment (docs/user-deals-assignment.md) ─────────────────────── */
+
+export type SourceCounts = Partial<Record<AssignmentRule, number>>
+
+/** Someone on the pipeline's access list, with the deals they own here. */
+export interface AssignmentPerson {
+  userId: string
+  fullName: string
+  email: string
+  role: string
+  /** Can receive deals now (active, CRM access, not the Owner). */
+  eligible: boolean
+  dealCount: number
+  bySource: SourceCounts
+}
+
+export interface AssignmentOverview {
+  rule: AssignmentRule
+  singleUserId: string | null
+  total: number
+  assigned: number
+  bySource: SourceCounts
+  people: AssignmentPerson[]
+  chunkSize: number
+}
+
+export const crmAssignmentKey = (pipelineId: string) => [...CRM_KEY, 'assignment', pipelineId] as const
+
+export const crmAssignmentQuery = (pipelineId: string) =>
+  queryOptions({
+    queryKey: crmAssignmentKey(pipelineId),
+    queryFn: () => api<AssignmentOverview>(`/crm/pipelines/${pipelineId}/assignment`),
+    enabled: Boolean(pipelineId),
+    staleTime: 0,
+  })
+
+export const setCrmAssignmentRule = (pipelineId: string, rule: AssignmentRule, singleUserId?: string) =>
+  api<AssignmentOverview>(`/crm/pipelines/${pipelineId}/assignment-rule`, {
+    method: 'PUT',
+    body: JSON.stringify({ rule, ...(singleUserId ? { singleUserId } : {}) }),
+  })
+
+/** One chunk: Share (round robin) or Give (single user) the oldest unassigned deals. */
+export const distributeCrmDeals = (pipelineId: string, method: 'round_robin' | 'single_user', userId?: string) =>
+  api<{ assigned: number; remaining: number; eligibleCount: number }>(`/crm/pipelines/${pipelineId}/assignments/share`, {
+    method: 'POST',
+    body: JSON.stringify({ method, ...(userId ? { userId } : {}) }),
+  })
+
+/** One chunk: unassign a person's deals and/or one source's deals. */
+export const unassignCrmDeals = (pipelineId: string, scope: { userId?: string; source?: AssignmentRule }) =>
+  api<{ unassigned: number; remaining: number }>(`/crm/pipelines/${pipelineId}/assignments/unassign`, {
+    method: 'POST',
+    body: JSON.stringify(scope),
+  })
+
+/** One chunk: move a person's deals (optionally one source) to someone else. Sources and the rule stay. */
+export const transferCrmDeals = (
+  pipelineId: string,
+  move: { fromUserId: string; toUserId: string; source?: AssignmentRule },
+) =>
+  api<{ transferred: number; remaining: number }>(`/crm/pipelines/${pipelineId}/assignments/transfer`, {
+    method: 'POST',
+    body: JSON.stringify(move),
+  })
+
+/** Everyone who could be on the access list, and who is. */
+export interface AccessCandidate {
+  userId: string
+  fullName: string
+  email: string
+  role: string
+  onList: boolean
+  eligible: boolean
+  dealCount: number
+}
+
+export const crmAccessListQuery = (pipelineId: string) =>
+  queryOptions({
+    queryKey: [...CRM_KEY, 'access-list', pipelineId],
+    queryFn: () => api<AccessCandidate[]>(`/crm/pipelines/${pipelineId}/users`),
+    enabled: Boolean(pipelineId),
+    staleTime: 0,
+  })
+
+export const saveCrmAccessList = (
+  pipelineId: string,
+  userIds: string[],
+  handover?: { mode: 'unassign' | 'transfer'; toUserId?: string },
+) =>
+  api<AccessCandidate[]>(`/crm/pipelines/${pipelineId}/users`, {
+    method: 'PUT',
+    body: JSON.stringify({ userIds, ...(handover ? { handover } : {}) }),
+  })
+
+/** A hand-picked owner (or none) for one deal. */
+export const setCrmDealOwner = (dealId: string, ownerId: string | null) =>
+  api<CrmDeal>(`/crm/deals/${dealId}/owner`, { method: 'PATCH', body: JSON.stringify({ ownerId }) })
+
+/** Runs a chunked tool until nothing remains, reporting progress after each chunk. */
+export async function runInChunks(
+  step: () => Promise<{ done: number; remaining: number }>,
+  onProgress: (done: number, total: number) => void,
+): Promise<number> {
+  let done = 0
+  for (;;) {
+    const result = await step()
+    done += result.done
+    onProgress(done, done + result.remaining)
+    // Nothing moved but some remain (e.g. nobody can receive them): stop rather than loop.
+    if (result.remaining === 0 || result.done === 0) return done
+  }
+}
 
 /** Most clients one bulk-add request takes; the Clients page sends larger selections in chunks. */
 export const CRM_BULK_CHUNK = 500

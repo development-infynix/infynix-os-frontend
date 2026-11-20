@@ -118,6 +118,8 @@ export function ClientDetailsDrawer({ client, onClose }: ClientDetailsDrawerProp
         ref={ref}
         aria-labelledby={titleId}
         onCancel={(event) => {
+          // A dialog opened inside this one (a confirmation) sends its own close/cancel up through React: ignore it.
+          if (event.target !== event.currentTarget) return
           event.preventDefault()
           close()
         }}

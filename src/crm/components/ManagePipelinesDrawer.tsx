@@ -111,11 +111,14 @@ export function ManagePipelinesDrawer({ open, onOpenChange }: ManagePipelinesDra
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         onCancel={(event) => {
+          // A dialog opened inside this one (a confirmation) sends its own close/cancel up through React: ignore it.
+          if (event.target !== event.currentTarget) return
           event.preventDefault()
           close()
         }}
         // If the browser closes it itself (Escape pressed twice), keep the page in step.
-        onClose={() => {
+        onClose={(event) => {
+          if (event.target !== event.currentTarget) return
           if (busy) ref.current?.showModal()
           else if (open) onOpenChange(false)
         }}

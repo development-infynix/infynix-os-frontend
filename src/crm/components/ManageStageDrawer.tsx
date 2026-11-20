@@ -251,10 +251,13 @@ export function ManageStageDrawer({ open, onOpenChange, pipelineId }: ManageStag
         ref={ref}
         aria-labelledby={titleId}
         onCancel={(event) => {
+          // A dialog opened inside this one (a confirmation) sends its own close/cancel up through React: ignore it.
+          if (event.target !== event.currentTarget) return
           event.preventDefault()
           close()
         }}
-        onClose={() => {
+        onClose={(event) => {
+          if (event.target !== event.currentTarget) return
           if (busy) ref.current?.showModal()
           else if (open) onOpenChange(false)
         }}

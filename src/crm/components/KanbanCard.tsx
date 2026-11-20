@@ -4,8 +4,6 @@ import { Check, ChevronsRight, Mail, Phone, SlidersHorizontal } from 'lucide-rea
 import { memo, type KeyboardEvent, type ReactNode } from 'react'
 import type { CrmDeal } from '../types'
 
-const addedFormat = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' })
-
 export interface KanbanCardProps {
   deal: CrmDeal
   /** Select mode: a select circle replaces the options button. */
@@ -92,7 +90,12 @@ export const KanbanCard = memo(function KanbanCard({
       </dl>
 
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3">
-        <p className="text-caption text-ink-3 tabular-nums">Added {addedFormat.format(new Date(deal.addedAt))}</p>
+        <p
+          className={`min-w-0 truncate text-caption ${deal.ownerName ? 'font-medium text-ink-2' : 'text-ink-3'}`}
+          title={deal.ownerName ? `Owner: ${deal.ownerName}` : 'No owner yet'}
+        >
+          {deal.ownerName ?? 'Unassigned'}
+        </p>
         <button
           type="button"
           onClick={(event) => {

@@ -82,6 +82,8 @@ interface CrmActionsProps {
   onCreatePipeline?: () => void
   /** Opens the stage drawer for the selected pipeline; absent when unavailable. */
   onManageStages?: () => void
+  /** Opens the Assign deals drawer (read-only for staff); absent without a pipeline. */
+  onAssignDeals?: () => void
   /** False when there are no pipelines yet: Manage has nothing to manage. */
   hasPipelines?: boolean
 }
@@ -101,6 +103,7 @@ export function CrmActions({
   onManagePipelines,
   onCreatePipeline,
   onManageStages,
+  onAssignDeals,
   hasPipelines = false,
 }: CrmActionsProps) {
   const pipelineMenu =
@@ -115,7 +118,13 @@ export function CrmActions({
             action={action}
             pipelineName={pipelineName}
             pipelineMenu={action.key === 'manage-pipeline' ? pipelineMenu : undefined}
-            onClick={action.key === 'manage-stages' ? onManageStages : undefined}
+            onClick={
+              action.key === 'manage-stages'
+                ? onManageStages
+                : action.key === 'assign-deals'
+                  ? onAssignDeals
+                  : undefined
+            }
           />
         </li>
       ))}
