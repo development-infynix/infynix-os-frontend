@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronLeft, ChevronRight, Plus, Search } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, FileSpreadsheet, PenLine, Plus, Search, Upload } from 'lucide-react'
 import {
   useCallback,
   useEffect,
@@ -11,7 +11,9 @@ import {
 } from 'react'
 import { Button } from '@/components/Button'
 import { Loader } from '@/components/Loader'
+import { hasAccess } from '@/lib/access'
 import { useSession } from '@/lib/auth'
+import { ClientImportModal } from '@/clients/components/ClientImportModal'
 import { ApiError } from '@/lib/api'
 import {
   appendCards,
@@ -26,6 +28,7 @@ import {
   type CrmBoard,
 } from '@/lib/crm'
 import { AddDealDialog } from '../components/AddDealDialog'
+import { AddFromImportsDrawer } from '../components/AddFromImportsDrawer'
 import { CrmActions } from '../components/CrmActions'
 import { DealDetailsDrawer } from '../components/DealDetailsDrawer'
 import { AddPipelineDrawer } from '../components/AddPipelineDrawer'
@@ -66,8 +69,11 @@ function writeStored(key: string, value: string) {
  * (Actions tab). Pipelines, stages and deals come from the API.
  */
 export function CrmPage() {
-  const { user } = useSession()
+  const session = useSession()
+  const { user } = session
   const canManage = user.role === 'owner' || user.role === 'manager'
+  // The import-based ways to add deals read the client directory, which needs the Clients menu too.
+  const canUseClients = hasAccess(session, 'clients')
   const queryClient = useQueryClient()
 
   const [tab, setTab] = useState<Tab>(() => (readStored(TAB_STORAGE_KEY) === 'actions' ? 'actions' : 'pipeline'))
@@ -76,6 +82,8 @@ export function CrmPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [searching, setSearching] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [addingFromImports, setAddingFromImports] = useState(false)
+  const [importingData, setImportingData] = useState(false)
   const [creatingPipeline, setCreatingPipeline] = useState(false)
   const [managingPipelines, setManagingPipelines] = useState(false)
   const [managingStages, setManagingStages] = useState(false)
@@ -178,9 +186,18 @@ export function CrmPage() {
 
   /** Drag state lives in the board query: the card shows where it was dropped before the save returns. */
   function setColumns(pipelineId: string, next: BoardColumns) {
-    queryClient.setQueryData<CrmBoard>(crmBoardKey(pipelineId), (current) =>
-      current ? { ...current, columns: next } : current,
-    )
+    queryClient.setQueryData<CrmBoard>(crmBoardKey(pipelineId), (current) => {
+      if (!current) return current
+      // Local moves change how many cards a stage holds; its total moves by the same amount. Without
+      // this, a column dragged empty still says "1 more" and loads the card back from the server
+      // (which hasn't saved the move yet), putting the same deal in two columns.
+      const totals = { ...current.totals }
+      for (const stageId of Object.keys(next)) {
+        const delta = (next[stageId]?.length ?? 0) - (current.columns[stageId]?.length ?? 0)
+        if (delta) totals[stageId] = Math.max(0, (totals[stageId] ?? 0) + delta)
+      }
+      return { ...current, columns: next, totals }
+    })
   }
   const updateColumns = (next: BoardColumns) => setColumns(activePipelineId, next)
 
@@ -238,7 +255,17 @@ export function CrmPage() {
         const page = await fetchCrmStageDeals(stageId, loaded)
         queryClient.setQueryData<CrmBoard>(crmBoardKey(pipelineId), (current) => {
           if (!current) return current
-          const cards = appendCards(current.columns[stageId] ?? [], page.items)
+          // Never add a card that's already on the board in another column: the server can be a
+          // step behind a move that hasn't saved yet, and one deal in two columns breaks dragging.
+          const elsewhere = new Set(
+            Object.entries(current.columns)
+              .filter(([id]) => id !== stageId)
+              .flatMap(([, cards]) => cards.map((card) => card.id)),
+          )
+          const cards = appendCards(
+            current.columns[stageId] ?? [],
+            page.items.filter((card) => !elsewhere.has(card.id)),
+          )
           // Nothing new (someone moved cards meanwhile): settle the count on what's loaded, or the
           // column would keep asking for the same slice. The next refetch brings the true total back.
           const total = cards.length === (current.columns[stageId]?.length ?? 0) ? cards.length : page.total
@@ -347,20 +374,28 @@ export function CrmPage() {
                   onToggle={() => (selecting ? stopSelecting() : setSelecting(true))}
                   onClear={stopSelecting}
                 />
-                {!selecting && (
-                  <Button
-                    variant="primary"
-                    onClick={() => setAdding(true)}
-                    aria-haspopup="dialog"
-                    aria-label="Add a deal"
-                    title="Add a deal"
-                    disabled={!pipeline || !firstStage}
-                    className="w-9 px-0! sm:w-auto sm:px-3.5!"
-                  >
-                    <Plus size={16} strokeWidth={2.25} aria-hidden className="shrink-0" />
-                    <span className="hidden sm:inline">Add deal</span>
-                  </Button>
-                )}
+                {!selecting &&
+                  (canUseClients ? (
+                    <AddDealMenu
+                      disabled={!pipeline || !firstStage}
+                      onForm={() => setAdding(true)}
+                      onExistingImport={() => setAddingFromImports(true)}
+                      onImportData={() => setImportingData(true)}
+                    />
+                  ) : (
+                    <Button
+                      variant="primary"
+                      onClick={() => setAdding(true)}
+                      aria-haspopup="dialog"
+                      aria-label="Add a deal"
+                      title="Add a deal"
+                      disabled={!pipeline || !firstStage}
+                      className="w-9 px-0! sm:w-auto sm:px-3.5!"
+                    >
+                      <Plus size={16} strokeWidth={2.25} aria-hidden className="shrink-0" />
+                      <span className="hidden sm:inline">Add deal</span>
+                    </Button>
+                  ))}
               </>
             )}
             <PipelineSelect
@@ -522,6 +557,20 @@ export function CrmPage() {
           onOpenChange={setManagingStages}
           pipelineId={activePipelineId}
         />
+        {pipeline && canUseClients && (
+          <>
+            <AddFromImportsDrawer
+              open={addingFromImports}
+              onOpenChange={setAddingFromImports}
+              pipeline={{ ...pipeline, stages }}
+            />
+            <ClientImportModal
+              open={importingData}
+              onOpenChange={setImportingData}
+              pipeline={{ ...pipeline, stages }}
+            />
+          </>
+        )}
         {/* Always mounted so it can slide out; it resets itself each time it opens. */}
         <ManagePipelinesDrawer open={managingPipelines} onOpenChange={setManagingPipelines} />
         <AddPipelineDrawer
@@ -550,6 +599,111 @@ function LoadFailure({ message, onRetry }: { message: string; onRetry: () => voi
           Try again
         </Button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Add deal for people who can also open Clients: one button with three ways in.
+ * Form is the single-deal dialog; Existing import adds whole imports' clients;
+ * Import data runs the Excel import and adds what it creates.
+ */
+function AddDealMenu({
+  disabled,
+  onForm,
+  onExistingImport,
+  onImportData,
+}: {
+  disabled: boolean
+  onForm: () => void
+  onExistingImport: () => void
+  onImportData: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const firstItemRef = useRef<HTMLButtonElement>(null)
+  const menuId = useId()
+
+  useEffect(() => {
+    if (!open) return
+    firstItemRef.current?.focus()
+    const onPointerDown = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setOpen(false)
+      ref.current?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')?.focus()
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  function choose(action: () => void) {
+    // Back on the trigger first: the dialog returns focus to whatever had it when it opened.
+    ref.current?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')?.focus()
+    setOpen(false)
+    action()
+  }
+
+  const items = [
+    { label: 'Form', hint: 'Add one client as a deal', icon: PenLine, action: onForm },
+    { label: 'Existing import', hint: 'Add the clients from imports', icon: FileSpreadsheet, action: onExistingImport },
+    { label: 'Import data', hint: 'Import a spreadsheet into this pipeline', icon: Upload, action: onImportData },
+  ]
+
+  return (
+    <div ref={ref} className="relative">
+      <Button
+        variant="primary"
+        onClick={() => setOpen((current) => !current)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        aria-label="Add a deal"
+        title="Add a deal"
+        disabled={disabled}
+        className="w-9 px-0! sm:w-auto sm:px-3.5!"
+      >
+        <Plus size={16} strokeWidth={2.25} aria-hidden className="shrink-0" />
+        <span className="hidden sm:inline">Add deal</span>
+        <ChevronDown
+          size={15}
+          strokeWidth={2}
+          aria-hidden
+          className={`-mr-0.5 hidden shrink-0 transition-transform duration-press sm:block ${open ? 'rotate-180' : ''}`}
+        />
+      </Button>
+      {open && (
+        <ul
+          id={menuId}
+          role="menu"
+          aria-label="Add a deal"
+          className="absolute right-0 z-30 mt-1 w-64 rounded-lg bg-surface py-1 shadow-dialog"
+        >
+          {items.map(({ label, hint, icon: Icon, action }, index) => (
+            <li key={label} role="none">
+              <button
+                ref={index === 0 ? firstItemRef : undefined}
+                type="button"
+                role="menuitem"
+                onClick={() => choose(action)}
+                className="flex w-full items-start gap-2.5 px-3 py-2 text-left hover:bg-surface-hover"
+              >
+                <Icon size={16} strokeWidth={2} aria-hidden className="mt-0.5 shrink-0 text-ink-3" />
+                <span className="min-w-0">
+                  <span className="block text-body font-medium text-ink">{label}</span>
+                  <span className="block text-caption text-ink-3">{hint}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

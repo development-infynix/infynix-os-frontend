@@ -47,13 +47,6 @@ export const clientQuery = (id: string) =>
     retry: false,
   })
 
-export interface ClientImportRow {
-  name: string
-  email: string | null
-  phone: string | null
-  customDetails: Client['customDetails']
-}
-
 export interface ClientImport {
   id: string
   name: string
@@ -62,10 +55,6 @@ export interface ClientImport {
   createdCount: number
   skippedCount: number
   createdAt: string
-}
-
-export interface ClientImportDetail extends ClientImport {
-  rows: ClientImportRow[]
 }
 
 export interface ClientImportInput {
@@ -82,14 +71,6 @@ export const clientImportsQuery = () =>
   queryOptions({
     queryKey: [...CLIENT_IMPORTS_KEY, 'list'],
     queryFn: () => api<ClientImport[]>('/client-imports'),
-  })
-
-/** One import with its stored rows (the View rows dialog reads this). */
-export const clientImportQuery = (id: string) =>
-  queryOptions({
-    queryKey: [...CLIENT_IMPORTS_KEY, 'one', id],
-    queryFn: () => api<ClientImportDetail>(`/client-imports/${id}`),
-    retry: false,
   })
 
 export interface ClientInput {
@@ -139,7 +120,41 @@ export const updateClient = (id: string, patch: Partial<ClientInput>) =>
 export const createClientImport = (input: ClientImportInput) =>
   api<ClientImport>('/client-imports', { method: 'POST', body: JSON.stringify(input) })
 
-/** One chunk of an import, at most 100 rows. */
+/** Most rows one import request takes (the endpoint's maximum, and the whole-file cap). */
+export const IMPORT_CHUNK_ROWS = 500
+/**
+ * Most JSON one import request carries. The server refuses bodies over 1 MB
+ * (Fastify's default); half that leaves room for the wrapper and any
+ * underestimate. Custom details have no size cap, so wide spreadsheets hit this
+ * before the row limit.
+ */
+export const IMPORT_CHUNK_BYTES = 512 * 1024
+
+/**
+ * Splits import rows into requests by size: up to IMPORT_CHUNK_ROWS rows, but a
+ * new chunk starts once the next row would take it past IMPORT_CHUNK_BYTES. A
+ * narrow 500-row file goes in one request; a wide one in a few. Order is kept.
+ */
+export function chunkImportRows(rows: ClientInput[]): ClientInput[][] {
+  const encoder = new TextEncoder()
+  const chunks: ClientInput[][] = []
+  let current: ClientInput[] = []
+  let bytes = 0
+  for (const row of rows) {
+    const size = encoder.encode(JSON.stringify(row)).length + 1 // + the comma between rows
+    if (current.length && (current.length >= IMPORT_CHUNK_ROWS || bytes + size > IMPORT_CHUNK_BYTES)) {
+      chunks.push(current)
+      current = []
+      bytes = 0
+    }
+    current.push(row)
+    bytes += size
+  }
+  if (current.length) chunks.push(current)
+  return chunks
+}
+
+/** One chunk of an import: build chunks with chunkImportRows. */
 export const importClientsChunk = (importId: string, clients: ClientInput[]) =>
   api<{ created: number; skipped: number }>('/clients/import', {
     method: 'POST',

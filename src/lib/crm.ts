@@ -214,7 +214,7 @@ export const crmPipelineDeleteImpactQuery = (id: string) =>
 export const deleteCrmPipeline = (id: string) => api<void>(`/crm/pipelines/${id}`, { method: 'DELETE' })
 
 /** Most clients one bulk-add request takes; the Clients page sends larger selections in chunks. */
-export const CRM_BULK_CHUNK = 100
+export const CRM_BULK_CHUNK = 500
 
 export interface AddCrmDealsResult {
   added: number

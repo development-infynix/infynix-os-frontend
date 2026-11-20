@@ -1,13 +1,18 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronDown, Upload } from 'lucide-react'
+import { Check, ChevronDown, Circle, Loader2, Upload, X } from 'lucide-react'
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import * as XLSX from 'xlsx'
+import { StagePicker } from '@/crm/components/StagePicker'
+import type { CrmPipeline } from '@/crm/types'
+import { useAddToPipeline, type AddToPipelineRun } from '@/crm/useAddToPipeline'
 import { Button } from '@/components/Button'
 import { FormError, FormField } from '@/components/FormField'
 import { Modal } from '@/components/Modal'
 import {
   CLIENTS_KEY,
   CLIENT_IMPORTS_KEY,
+  chunkImportRows,
+  clientImportIdsQuery,
   createClientImport,
   importClientsChunk,
   type ClientInput,
@@ -15,7 +20,6 @@ import {
 
 const STEPS = ['Upload file', 'Match fields', 'Select fields', 'Preview'] as const
 const MAX_ROWS = 500
-const CHUNK_SIZE = 100
 type Step = 1 | 2 | 3 | 4
 
 interface ParsedFile {
@@ -74,11 +78,26 @@ function guessMapping(headers: string[]): FieldMapping {
 export function ClientImportModal({
   open,
   onOpenChange,
+  pipeline,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /**
+   * Opened from the CRM page (Add deal › Import data): the imported clients
+   * also become deals in this pipeline, in the stage picked on the last step.
+   */
+  pipeline?: CrmPipeline
 }) {
   const queryClient = useQueryClient()
+  const [stageId, setStageId] = useState<string | null>(pipeline?.stages[0]?.id ?? null)
+  /** The finished import, kept so adding its clients to the pipeline can be retried. */
+  const [importId, setImportId] = useState<string | null>(null)
+  /** Fetching the new clients' ids failed: nothing was sent to the pipeline yet. */
+  const [idsFailed, setIdsFailed] = useState(false)
+  const pipelineRun = useAddToPipeline()
+  const stage = pipeline?.stages.find((item) => item.id === stageId) ?? pipeline?.stages[0] ?? null
+  const where = pipeline ? (stage ? `${pipeline.name} › ${stage.name}` : pipeline.name) : ''
+  const addingToPipeline = pipelineRun.phase === 'running'
   const [step, setStep] = useState<Step>(1)
   const [file, setFile] = useState<ParsedFile | null>(null)
   const [mapping, setMapping] = useState<FieldMapping>({ name: '', email: '', phone: '' })
@@ -99,10 +118,14 @@ export function ClientImportModal({
     setImporting(false)
     setProgress(null)
     setResult(null)
+    setStageId(pipeline?.stages[0]?.id ?? null)
+    setImportId(null)
+    setIdsFailed(false)
+    pipelineRun.reset()
   }
 
   function close() {
-    if (importing) return
+    if (importing || addingToPipeline) return
     reset()
     onOpenChange(false)
   }
@@ -172,16 +195,20 @@ export function ClientImportModal({
         fileName: file.name,
         rowCount: file.rows.length,
       })
-      for (let index = 0; index < payloads.length; index += CHUNK_SIZE) {
-        const chunk = payloads.slice(index, index + CHUNK_SIZE)
+      // Chunks by size, not a fixed count: usually the whole file in one request.
+      let sent = 0
+      for (const chunk of chunkImportRows(payloads)) {
         const outcome = await importClientsChunk(job.id, chunk)
         created += outcome.created
         skipped += outcome.skipped
-        setProgress({ current: Math.min(index + chunk.length, payloads.length), total: payloads.length })
+        sent += chunk.length
+        setProgress({ current: sent, total: payloads.length })
       }
       await queryClient.invalidateQueries({ queryKey: CLIENTS_KEY })
       await queryClient.invalidateQueries({ queryKey: CLIENT_IMPORTS_KEY })
       setResult({ created, skipped })
+      setImportId(job.id)
+      if (pipeline && created > 0) void addToPipeline(job.id)
     } catch {
       setError('Couldn’t finish the import. Try again.')
       setProgress(null)
@@ -190,42 +217,67 @@ export function ClientImportModal({
     }
   }
 
+  /** From the CRM page: the clients this import created become deals in the pipeline. */
+  async function addToPipeline(id: string) {
+    if (!pipeline || !stage) return
+    setIdsFailed(false)
+    try {
+      const ids = await queryClient.fetchQuery({ ...clientImportIdsQuery(id), staleTime: 0 })
+      pipelineRun.start(ids, { pipelineId: pipeline.id, stageId: stage.id })
+    } catch {
+      setIdsFailed(true)
+    }
+  }
+
+  function retryPipeline() {
+    if (idsFailed && importId) void addToPipeline(importId)
+    else pipelineRun.retry()
+  }
+
+  const pipelineFailed = idsFailed || pipelineRun.phase === 'failed'
   const preview = file?.rows.slice(0, 5) ?? []
-  const percent = progress?.total ? Math.round((progress.current / progress.total) * 100) : 0
 
   return (
     <Modal
       open={open}
       onOpenChange={(next) => (next ? onOpenChange(true) : close())}
-      busy={importing}
+      busy={importing || addingToPipeline}
       wide
       title="Import clients"
-      description="Bring a spreadsheet of clients into the directory."
+      description={
+        pipeline
+          ? `Bring a spreadsheet of clients into the directory and add them to ${pipeline.name}.`
+          : 'Bring a spreadsheet of clients into the directory.'
+      }
     >
       <div className="flex max-h-[min(70vh,34rem)] flex-col overflow-hidden sm:max-h-[min(82vh,46rem)]">
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4">
           {importing || result ? (
-            <div>
-              <div className="mb-2 flex items-center justify-between text-caption text-ink-3">
-                <span>{importing ? 'Importing clients…' : 'Import complete'}</span>
-                <span className="tabular-nums">
-                  {progress?.current ?? 0} / {progress?.total ?? 0}
-                </span>
-              </div>
-              <div
-                role="progressbar"
-                aria-label="Import progress"
-                aria-valuenow={percent}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                className="h-2 overflow-hidden rounded-full bg-surface-hover"
-              >
-                <div
-                  className="h-full rounded-full bg-secondary transition-[width] duration-200"
-                  style={{ width: `${percent}%` }}
-                />
-              </div>
-            </div>
+            <ImportRun
+              importing={importing}
+              rowsSent={progress?.current ?? 0}
+              rowsTotal={progress?.total ?? 0}
+              result={result}
+              pipelineStep={
+                pipeline
+                  ? {
+                      where,
+                      state:
+                        idsFailed || pipelineRun.phase === 'failed'
+                          ? 'failed'
+                          : pipelineRun.phase === 'done'
+                            ? 'done'
+                            : pipelineRun.phase === 'running' || (result && result.created > 0)
+                              ? 'running'
+                              : result
+                                ? 'skipped'
+                                : 'waiting',
+                      run: pipelineRun,
+                      error: idsFailed ? 'Couldn’t start adding them. Try again.' : pipelineRun.error,
+                    }
+                  : undefined
+              }
+            />
           ) : (
             <ol className="flex items-center gap-2" aria-label="Import steps">
               {STEPS.map((label, index) => {
@@ -254,17 +306,7 @@ export function ClientImportModal({
           <div className="mt-5">
             <FormError message={error} />
 
-            {result ? (
-              <div className="rounded-xl bg-surface p-5 text-center shadow-lift">
-                <span className="mx-auto grid size-10 place-items-center rounded-lg bg-secondary-soft text-secondary-text">
-                  <Check size={20} strokeWidth={2} aria-hidden />
-                </span>
-                <p className="mt-3 text-title font-semibold text-ink">Import complete</p>
-                <p className="mt-1 text-body text-ink-2">
-                  {result.created} client{result.created === 1 ? '' : 's'} added · {result.skipped} skipped.
-                </p>
-              </div>
-            ) : step === 1 ? (
+            {result ? null : step === 1 ? (
               <label className="flex cursor-pointer flex-col items-center gap-3 rounded-xl border border-dashed border-line-strong bg-canvas/50 px-6 py-10 text-center hover:bg-surface-hover">
                 <span className="grid size-10 place-items-center rounded-lg bg-surface text-secondary-text shadow-lift">
                   <Upload size={19} strokeWidth={1.9} aria-hidden />
@@ -348,6 +390,16 @@ export function ClientImportModal({
                     />
                   </FormField>
                 </div>
+                {pipeline && pipeline.stages.length > 0 && (
+                  <div className="mb-5">
+                    <StagePicker
+                      stages={pipeline.stages}
+                      value={stage?.id ?? null}
+                      onChange={setStageId}
+                      label={`Also add them to ${pipeline.name}, in stage`}
+                    />
+                  </div>
+                )}
                 <p className="text-label text-ink-2">
                   Previewing {preview.length} of {file?.rows.length ?? 0} rows.
                 </p>
@@ -388,8 +440,13 @@ export function ClientImportModal({
 
         <div className="mt-5 flex items-center gap-2 border-t border-line bg-canvas/60 px-5 py-3.5 [&>*]:flex-1 sm:justify-end sm:[&>*]:flex-none">
           {(result || step === 1) && (
-            <Button variant="secondary" onClick={close} disabled={importing}>
-              {result ? 'Done' : 'Cancel'}
+            <Button variant="secondary" onClick={close} disabled={importing} loading={addingToPipeline}>
+              {result ? (addingToPipeline ? 'Adding to pipeline…' : 'Done') : 'Cancel'}
+            </Button>
+          )}
+          {result && pipelineFailed && (
+            <Button variant="primary" onClick={retryPipeline}>
+              Try again
             </Button>
           )}
           {!result && step > 1 && (
@@ -500,5 +557,147 @@ function ColumnSelect({
         )}
       </div>
     </FormField>
+  )
+}
+
+const number = new Intl.NumberFormat()
+
+type StepState = 'waiting' | 'running' | 'done' | 'failed' | 'skipped'
+
+interface PipelineStep {
+  /** "test 2 › Proposal". */
+  where: string
+  state: StepState
+  run: AddToPipelineRun
+  error: string | null
+}
+
+/**
+ * The import once it starts: one bar for the whole run (import, then the add to
+ * the pipeline when opened from the CRM page), a one-line status, and a short
+ * checklist of the steps with what each did. The ticked checklist is the summary.
+ */
+function ImportRun({
+  importing,
+  rowsSent,
+  rowsTotal,
+  result,
+  pipelineStep,
+}: {
+  importing: boolean
+  rowsSent: number
+  rowsTotal: number
+  result: ImportResult | null
+  pipelineStep?: PipelineStep
+}) {
+  const importState: StepState = importing ? 'running' : result ? 'done' : 'waiting'
+  // Until the import finishes, assume every row will reach the pipeline step; then use the real count.
+  const addTotal = pipelineStep
+    ? pipelineStep.state === 'skipped'
+      ? 0
+      : pipelineStep.run.total || result?.created || rowsTotal
+    : 0
+  const addSent = pipelineStep?.state === 'done' ? addTotal : (pipelineStep?.run.tally.sent ?? 0)
+  const done = rowsSent + addSent
+  const total = rowsTotal + addTotal
+  const percent = total ? Math.min(100, Math.round((done / total) * 100)) : 0
+  const failed = pipelineStep?.state === 'failed'
+  const finished = importState === 'done' && (!pipelineStep || ['done', 'skipped'].includes(pipelineStep.state))
+
+  const status = failed
+    ? 'Stopped'
+    : finished
+      ? 'Done'
+      : importState === 'running'
+        ? 'Importing clients…'
+        : `Adding to ${pipelineStep?.where.split(' › ')[0] ?? 'the pipeline'}…`
+
+  const tally = pipelineStep?.run.tally
+  const addDetail = !pipelineStep
+    ? ''
+    : pipelineStep.state === 'waiting'
+      ? 'Starts when the import finishes'
+      : pipelineStep.state === 'skipped'
+        ? 'No new clients to add'
+        : pipelineStep.state === 'failed'
+          ? (pipelineStep.error ?? 'Stopped.')
+          : pipelineStep.state === 'done'
+            ? [
+                `${number.format(tally!.added)} added`,
+                tally!.alreadyInPipeline ? `${number.format(tally!.alreadyInPipeline)} already there` : '',
+                tally!.notFound ? `${number.format(tally!.notFound)} no longer in your directory` : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            : pipelineStep.run.total
+              ? `${number.format(tally!.sent)} of ${number.format(pipelineStep.run.total)}`
+              : 'Getting ready…'
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3 text-label">
+        <span className={`font-medium ${failed ? 'text-danger' : 'text-ink'}`} aria-live="polite">
+          {status}
+        </span>
+        <span className="text-ink-3 tabular-nums">{percent}%</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label="Import progress"
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className="mt-2 h-2 overflow-hidden rounded-full bg-surface-hover"
+      >
+        <div
+          className={`h-full rounded-full transition-[width] duration-200 ${failed ? 'bg-danger' : 'bg-secondary'}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+
+      <ol className="mt-5 flex flex-col gap-3.5" aria-label="Import steps">
+        <RunStep
+          state={importState}
+          title="Import clients"
+          detail={
+            result
+              ? `${number.format(result.created)} added · ${number.format(result.skipped)} skipped`
+              : `${number.format(rowsSent)} of ${number.format(rowsTotal)} rows`
+          }
+        />
+        {pipelineStep && <RunStep state={pipelineStep.state} title={`Add to ${pipelineStep.where}`} detail={addDetail} />}
+      </ol>
+    </div>
+  )
+}
+
+function RunStep({ state, title, detail }: { state: StepState; title: string; detail: string }) {
+  return (
+    <li className="flex items-start gap-3">
+      <span
+        className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full ${
+          state === 'done'
+            ? 'bg-secondary text-on-secondary'
+            : state === 'failed'
+              ? 'bg-danger text-on-danger'
+              : 'text-ink-3'
+        }`}
+        aria-hidden
+      >
+        {state === 'done' ? (
+          <Check size={12} strokeWidth={3} />
+        ) : state === 'failed' ? (
+          <X size={12} strokeWidth={3} />
+        ) : state === 'running' ? (
+          <Loader2 size={16} strokeWidth={2.25} className="animate-spin" />
+        ) : (
+          <Circle size={16} strokeWidth={1.75} />
+        )}
+      </span>
+      <span className="min-w-0">
+        <span className={`block text-body font-medium ${state === 'waiting' ? 'text-ink-3' : 'text-ink'}`}>{title}</span>
+        <span className={`block text-label tabular-nums ${state === 'failed' ? 'text-danger' : 'text-ink-3'}`}>{detail}</span>
+      </span>
+    </li>
   )
 }

@@ -26,6 +26,8 @@ export interface KanbanColumnProps {
   loadingMore?: boolean
   /** The last page request failed: show Retry instead of loading again on its own. */
   loadMoreFailed?: boolean
+  /** A card is being dragged: wait. Loading mid-drag races the move that hasn't saved yet. */
+  loadPaused?: boolean
 }
 
 /** Start the next page this far before the bottom, so scrolling rarely meets the loader. */
@@ -48,6 +50,7 @@ export const KanbanColumn = memo(function KanbanColumn({
   onLoadMore,
   loadingMore = false,
   loadMoreFailed = false,
+  loadPaused = false,
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
   const ids = useMemo(() => deals.map((deal) => deal.id), [deals])
@@ -64,7 +67,8 @@ export const KanbanColumn = memo(function KanbanColumn({
     [setNodeRef],
   )
   const sentinel = useRef<HTMLDivElement>(null)
-  const canLoad = hasMore && !loadingMore && !loadMoreFailed && Boolean(onLoadMore)
+  // Unpausing re-runs the effect below, so a load skipped during a drag happens after the drop.
+  const canLoad = hasMore && !loadingMore && !loadMoreFailed && !loadPaused && Boolean(onLoadMore)
 
   // Re-created after every page (deals.length), so a column still short of the
   // bottom keeps loading until it fills or runs out.

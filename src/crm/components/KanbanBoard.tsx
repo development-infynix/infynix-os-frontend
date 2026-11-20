@@ -388,6 +388,7 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
             onLoadMore={onLoadMore}
             loadingMore={loadingStages.has(stage.id)}
             loadMoreFailed={failedStages.has(stage.id)}
+            loadPaused={activeId !== null}
           />
         ))}
       </div>

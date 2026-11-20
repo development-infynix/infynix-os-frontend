@@ -89,7 +89,7 @@ export function ClientImportCard({
 
   return (
     <>
-      <li className="relative overflow-hidden rounded-xl bg-surface shadow-lift">
+      <li className="card-3d relative overflow-hidden rounded-xl">
         <div className={`border-b border-line bg-canvas/60 px-4 py-3 ${renaming ? '' : 'pr-12'}`}>
           {renaming ? (
             <form
