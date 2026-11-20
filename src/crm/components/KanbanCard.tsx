@@ -41,9 +41,11 @@ export const KanbanCard = memo(function KanbanCard({
     <article
       aria-label={deal.name}
       onClick={selectable ? () => onToggleSelect?.(deal.id) : undefined}
-      className={`rounded-xl bg-surface p-4 transition-shadow duration-enter ease-out-expo ${
-        overlay ? 'rotate-[1.5deg] cursor-grabbing shadow-dialog' : 'shadow-lift'
-      } ${selectable ? 'cursor-pointer' : ''} ${selected || highlighted ? 'ring-2 ring-secondary' : ''}`}
+      // Raised like the buttons (card-3d); the drag copy swaps in the bigger dialog shadow. Selection and the
+      // search highlight use an outline, not a ring: a ring is a box-shadow and would flatten the card.
+      className={`card-3d rounded-xl p-4 ${overlay ? 'rotate-[1.5deg] cursor-grabbing shadow-dialog' : ''} ${
+        selectable ? 'cursor-pointer' : ''
+      } ${selected || highlighted ? 'outline-2 outline-secondary' : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <h3 className="min-w-0 truncate text-body font-semibold text-ink">{deal.name}</h3>

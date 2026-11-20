@@ -113,6 +113,25 @@
     color: var(--on-danger);
   }
 
+  /* Cards with the secondary button's raised surface (e.g. CRM actions). Clickable
+     ones (a <button>) brighten on hover and flatten when pressed, like the buttons. */
+  .card-3d {
+    background: var(--btn-secondary-bg);
+    box-shadow: var(--btn-secondary-shadow);
+    color: var(--ink);
+    transition:
+      filter var(--duration-press) ease-out,
+      box-shadow var(--duration-press) ease-out,
+      translate var(--duration-press) var(--ease-out-expo);
+  }
+  button.card-3d:hover:not(:disabled) {
+    filter: var(--btn-hover-filter);
+  }
+  button.card-3d:active:not(:disabled) {
+    translate: 0 0.5px;
+    box-shadow: var(--btn-secondary-shadow), var(--btn-pressed);
+  }
+
   /* Text inputs: white field, hairline ring; focus and invalid thicken it. */
   .field-input {
     display: block;

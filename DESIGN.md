@@ -124,6 +124,10 @@ components:
     backgroundColor: "{colors.paper}"
     rounded: "{rounded.xl}"
     padding: "0"
+  card-raised:
+    backgroundColor: "{colors.paper}"
+    rounded: "{rounded.xl}"
+    padding: "16px"
   nav-item:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink-2}"
@@ -157,7 +161,7 @@ The system is Swiss in its structure and paper in its material. A 4px grid, hair
 - One accent: ink green (#017c5f), used for action, selection and state, never decoration.
 - Hairline structure: 1px warm borders and rings instead of heavy containers.
 - Compact working type: weight first, size second, 11–34px only.
-- Flat by default; warm Lift for panels, Dialog for overlays, Well for segmented controls.
+- Flat by default; warm Lift for panels, Raised (the secondary button's subtle bevel) for cards you handle, Dialog for overlays, Well for segmented controls.
 - Sentence-case controls, counted and tabular wherever numbers appear.
 
 ## Colors
@@ -230,20 +234,27 @@ Below `lg` the sidebar becomes a 280px drawer with a scrim; tables become one ca
 
 ## Elevation & Depth
 
-Hybrid: tonal layering plus a warm 1px ring plus a short, soft shadow. Surfaces are flat at rest; a panel earns Lift because it holds content, not because it is a card. Overlays earn Dialog because they leave the page. The segmented control is the only element that goes inward, with the Well shadow.
+Hybrid: tonal layering plus a warm 1px ring plus a short, soft shadow. Surfaces are flat at rest; a panel earns Lift because it holds content, not because it is a card. A card that is an object you pick, open, drag or act on earns **Raised**: the same subtle bevel as the secondary button, so it reads as something you can handle. Overlays earn Dialog because they leave the page. The segmented control is the only element that goes inward, with the Well shadow.
+
+The 3D is deliberately subtle: a two-stop paper gradient, a hairline ring, a one-pixel lit or shaded edge and a short drop. It should read as "slightly raised paper", never as a glossy or bulging button.
 
 ### Shadow Vocabulary
 - **Lift** (`0 0 0 1px rgb(43 36 24 / 0.07), 0 1px 2px -1px rgb(43 36 24 / 0.08), 0 4px 12px -2px rgb(43 36 24 / 0.06)`): panels, tables, empty-state icon tiles.
 - **Dialog** (`0 0 0 1px rgb(43 36 24 / 0.07), 0 8px 16px -4px rgb(43 36 24 / 0.1), 0 24px 48px -12px rgb(43 36 24 / 0.18)`): dialogs, drawers and their backdrops.
 - **Well** (`inset 0 1px 3px rgb(43 36 24 / 0.1), inset 0 -1px 0 rgb(255 255 255 / 0.55), inset 0 0 0 1px rgb(43 36 24 / 0.09)`): the groove a segmented control sits in.
 - **Button bevel** (`0 0 0 1px <deep>, inset 0 1px 0 rgb(255 255 255 / 0.2), 0 1px 2px …, 0 2px 6px -2px …`): the lit top edge of primary, secondary and danger buttons.
+- **Raised** (the `card-3d` class in `src/index.css`): `--btn-secondary-bg` gradient (#fdfbf7 to #f2eee5) with `--btn-secondary-shadow` (warm ring, shaded bottom edge, 1–2px drop). In dark theme the same tokens give a near-black gradient with a lit top edge. Used on CRM action cards, kanban cards, kanban stage headers, and the pipeline and stage rows in the management drawers. A clickable raised card (a `<button>`) also takes the button's hover brightness and its 0.5px press.
 
 Dark theme replaces the Lift with a white hairline ring and the Dialog with a deeper black falloff; the Well keeps its inset logic.
 
 ### Named Rules
-**The Flat-by-Default Rule.** A surface is flat until it needs to float: panels get Lift, overlays get Dialog, nothing else gets a shadow.
+**The Flat-by-Default Rule.** A surface is flat until it needs to float: panels get Lift, handled cards get Raised, overlays get Dialog, nothing else gets a shadow.
 
-**The Recessed-Segment Rule.** The Well is reserved for segmented controls. Never put an inset shadow on an input, a card or a navigation item.
+**The Raised-Card Rule.** Use Raised (`card-3d`) for any new card that is an object in its own right: something you open, choose, drag, reorder or act on (action cards, board cards, list items in a management drawer, column headers that belong with them). Always apply it through `card-3d`, never by copying the values, so cards follow the buttons when the tokens change. Keep it subtle: no extra gradients, glows, thicker drops or hover lifts beyond the button's own brightness and press. A raised element that is not itself clickable gets the surface only; its buttons keep their own effects. Panels that hold content (tables, details, forms) stay on Lift.
+
+**The One-Shadow Rule.** A raised card's depth lives in `box-shadow`, so never add a Tailwind `ring-*` or `shadow-*` to it except the Dialog shadow on the copy being dragged: a ring replaces the bevel and flattens the card. Show selection, focus or a highlight with an `outline` (for example `outline-2 outline-secondary`) instead.
+
+**The Recessed-Segment Rule.** The Well is reserved for segmented controls. Never put an inset shadow on an input, a card, a navigation item or a container. Recessed trays for kanban columns ("slots") were tried on 20 Nov 2026 and rejected: raised cards sit on the plain hairline column, not in a sunken well. The system is subtle raise, not full skeuomorphism.
 
 ## Shapes
 
@@ -269,11 +280,18 @@ Circular shapes are reserved for status dots and the header theme toggle; avatar
 - **Rule:** sentence-case names, one selected at a time, only its panel shown. Arrow keys move between tabs and the panel is labelled by its tab.
 
 ### Cards / Panels
-- **Corner Style:** 12px.
-- **Background:** paper, with a header strip at canvas/50.
-- **Shadow Strategy:** Lift only.
-- **Border:** a 1px hairline between header and body; internal rows divided by hairlines.
-- **Internal Padding:** 12–16px; a details grid uses a 6.5rem label column and a 12px gap.
+- **Two kinds.** A *panel* holds content (tables, detail sheets, forms, checklists) and uses Lift. A *card* is an object you handle (an action, a deal, a stage, a pipeline row) and uses Raised. If you are unsure, ask whether the user acts on the thing itself (card) or reads what is inside it (panel).
+- **Corner Style:** 12px for cards and panels; 8px for compact rows inside a drawer list.
+- **Background:** panels are paper with a header strip at canvas/50; cards take the Raised gradient from `card-3d`.
+- **Shadow Strategy:** panels Lift only; cards Raised only (Dialog while being dragged).
+- **Border:** panels use a 1px hairline between header and body and hairline-divided rows. Cards have no extra border: the Raised ring is the edge.
+- **Internal Padding:** 12–16px for panels and board cards, 20px for action cards; a details grid uses a 6.5rem label column and a 12px gap.
+
+### Kanban board
+- **Stage header:** a Raised card with the 01-style stage number, the name, a count badge and a thin share bar.
+- **Column (slot):** a flat container with a 1px hairline border and a faint paper fill; while a card is dragged over it, the border strengthens and the fill moves to paper-hover. No inset shadow (see the Recessed-Segment Rule).
+- **Deal card:** a Raised card; the whole card is the drag handle, so it has no hover or press of its own; its View and options buttons carry the button effects. Selection and the search highlight are a 2px ink-green outline. The copy under the pointer while dragging tilts 1.5° and swaps to the Dialog shadow.
+- **Loading more:** a small spinning circle (lucide `Loader2`, ink-3) at the foot of the column, not the bar loader.
 
 ### Inputs / Fields
 - **Style:** 40px tall, 8px radius, paper background, inset 1px strong-hairline ring, 12px inline padding, 14px body text.
@@ -311,6 +329,7 @@ Circular shapes are reserved for status dots and the header theme toggle; avatar
 - **Do** read values from `src/styles/tokens.css`; use the generated Tailwind utilities (`bg-surface`, `text-ink-2`, `shadow-lift`, `ease-out-expo`) rather than raw hex.
 - **Do** keep the accent rare: primary action, active navigation, role, focus, selection.
 - **Do** use hairlines and warm shadows to separate surfaces; let the paper do the work.
+- **Do** give every new handled card (actions, board items, reorderable rows) the Raised surface via `card-3d`, so the whole product shares one subtle 3D language with its buttons.
 - **Do** write sentence-case labels that name the action ("Save access", "Try again") and errors that name the problem and the recovery.
 - **Do** show hover, focus, disabled, loading and empty states for every control you add.
 - **Do** use `tabular-nums` for dates, counts and anything compared in a column.
@@ -318,7 +337,9 @@ Circular shapes are reserved for status dots and the header theme toggle; avatar
 ### Don't:
 - **Don't** add a second accent, a gradient text fill, glass, or decorative blur.
 - **Don't** use pure white or pure black; the palette stays warm in both themes.
-- **Don't** put a shadow on a flat row, a nav item or an input; Lift belongs to panels, Dialog to overlays, Well to segmented controls.
+- **Don't** put a shadow on a flat row, a nav item or an input; Lift belongs to panels, Raised to handled cards, Dialog to overlays, Well to segmented controls.
+- **Don't** hand-roll a 3D card with your own gradient or shadow, stack a `ring-*` on a raised card, or make the bevel louder; use `card-3d` as it is.
+- **Don't** sink containers into the page (inset trays, recessed columns); only segmented controls go inward.
 - **Don't** use pills for containers or circles for avatars; dots are the only circles.
 - **Don't** use all-caps or a display face for labels, buttons or data.
 - **Don't** introduce a modal for an inline task, or a card for every block on the page.

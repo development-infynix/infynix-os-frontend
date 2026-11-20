@@ -30,6 +30,7 @@ import { CrmActions } from '../components/CrmActions'
 import { DealDetailsDrawer } from '../components/DealDetailsDrawer'
 import { AddPipelineDrawer } from '../components/AddPipelineDrawer'
 import { ManagePipelinesDrawer } from '../components/ManagePipelinesDrawer'
+import { ManageStageDrawer } from '../components/ManageStageDrawer'
 import {
   KanbanBoard,
   type BoardMove,
@@ -77,6 +78,7 @@ export function CrmPage() {
   const [adding, setAdding] = useState(false)
   const [creatingPipeline, setCreatingPipeline] = useState(false)
   const [managingPipelines, setManagingPipelines] = useState(false)
+  const [managingStages, setManagingStages] = useState(false)
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
   /** The deal open in the details drawer (from a card's View or a search result). */
   const [viewing, setViewing] = useState<CrmDeal | null>(null)
@@ -135,6 +137,7 @@ export function CrmPage() {
     setSelecting(false)
     setSelected(new Set())
     setMoveError(null)
+    setManagingStages(false)
   }
 
   function toggleSelected(id: string) {
@@ -486,6 +489,7 @@ export function CrmPage() {
               canManage={canManage}
               onManagePipelines={() => setManagingPipelines(true)}
               onCreatePipeline={() => setCreatingPipeline(true)}
+              onManageStages={canManage && pipeline ? () => setManagingStages(true) : undefined}
               hasPipelines={pipelines.length > 0}
             />
           </div>
@@ -512,6 +516,11 @@ export function CrmPage() {
           stageId={firstStage?.id}
           stageName={firstStage?.name ?? 'the first stage'}
           onAdded={(deal) => setPendingJump(deal.id)}
+        />
+        <ManageStageDrawer
+          open={managingStages}
+          onOpenChange={setManagingStages}
+          pipelineId={activePipelineId}
         />
         {/* Always mounted so it can slide out; it resets itself each time it opens. */}
         <ManagePipelinesDrawer open={managingPipelines} onOpenChange={setManagingPipelines} />

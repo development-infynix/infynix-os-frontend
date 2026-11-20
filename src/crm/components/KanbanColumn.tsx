@@ -89,7 +89,7 @@ export const KanbanColumn = memo(function KanbanColumn({
       data-stage-column
       className="flex w-[18.5rem] shrink-0 snap-start flex-col gap-3 sm:h-full sm:min-h-0 sm:w-[19.5rem]"
     >
-      <header className="rounded-xl bg-surface px-4 pt-3.5 pb-4 shadow-lift">
+      <header className="card-3d rounded-xl px-4 pt-3.5 pb-4">
         <div className="flex items-center gap-2.5">
           <span className="rounded-md bg-surface-hover px-1.5 py-0.5 text-caption font-medium text-ink-2 tabular-nums">
             {String(index).padStart(2, '0')}

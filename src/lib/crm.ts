@@ -87,6 +87,20 @@ export const crmBoardQuery = (pipelineId: string) =>
     enabled: Boolean(pipelineId),
   })
 
+/**
+ * Just the stages and their deal counts for the stage manager. The board
+ * endpoint with `limit=1` returns those without loading the cards.
+ */
+export const crmStageSummaryKey = (pipelineId: string) => [...CRM_KEY, 'stage-summary', pipelineId] as const
+
+export const crmStageSummaryQuery = (pipelineId: string) =>
+  queryOptions({
+    queryKey: crmStageSummaryKey(pipelineId),
+    queryFn: () => api<CrmBoard>(`/crm/pipelines/${pipelineId}/board?limit=1`),
+    enabled: Boolean(pipelineId),
+    staleTime: 0,
+  })
+
 /** One deal, fresh from the server: the details drawer opens with the card's copy and refreshes from this. */
 export const crmDealQuery = (dealId: string) =>
   queryOptions({
@@ -163,6 +177,23 @@ export const moveCrmDeal = (id: string, stageId: string, position: number) =>
 
 export const renameCrmPipeline = (id: string, name: string) =>
   api<CrmPipeline>(`/crm/pipelines/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) })
+
+export const renameCrmStage = (id: string, name: string) =>
+  api<CrmStage>(`/crm/stages/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) })
+
+/** Adds a stage at the end of the pipeline's board. */
+export const createCrmStage = (pipelineId: string, name: string) =>
+  api<CrmStage>(`/crm/pipelines/${pipelineId}/stages`, { method: 'POST', body: JSON.stringify({ name }) })
+
+/** Persists the full order: `stageIds` must list every stage in the pipeline. */
+export const reorderCrmStages = (pipelineId: string, stageIds: string[]) =>
+  api<void>(`/crm/pipelines/${pipelineId}/stages/order`, {
+    method: 'PUT',
+    body: JSON.stringify({ stageIds }),
+  })
+
+/** Only succeeds while the stage holds no deals; the server rejects otherwise. */
+export const deleteCrmStage = (id: string) => api<void>(`/crm/stages/${id}`, { method: 'DELETE' })
 
 /** What deleting a pipeline would remove: shown in the delete confirmation. */
 export interface CrmPipelineDeleteImpact {

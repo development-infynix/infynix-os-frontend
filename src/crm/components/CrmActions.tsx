@@ -80,6 +80,8 @@ interface CrmActionsProps {
   canManage?: boolean
   onManagePipelines?: () => void
   onCreatePipeline?: () => void
+  /** Opens the stage drawer for the selected pipeline; absent when unavailable. */
+  onManageStages?: () => void
   /** False when there are no pipelines yet: Manage has nothing to manage. */
   hasPipelines?: boolean
 }
@@ -98,6 +100,7 @@ export function CrmActions({
   canManage = false,
   onManagePipelines,
   onCreatePipeline,
+  onManageStages,
   hasPipelines = false,
 }: CrmActionsProps) {
   const pipelineMenu =
@@ -112,6 +115,7 @@ export function CrmActions({
             action={action}
             pipelineName={pipelineName}
             pipelineMenu={action.key === 'manage-pipeline' ? pipelineMenu : undefined}
+            onClick={action.key === 'manage-stages' ? onManageStages : undefined}
           />
         </li>
       ))}
@@ -123,16 +127,29 @@ function ActionCard({
   action,
   pipelineName,
   pipelineMenu,
+  onClick,
 }: {
   action: CrmAction
   pipelineName: string
   pipelineMenu?: PipelineMenuActions
+  onClick?: () => void
 }) {
   if (pipelineMenu) {
     return <PipelineMenuCard action={action} pipelineName={pipelineName} menu={pipelineMenu} />
   }
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="card-3d relative flex min-h-36 w-full flex-col justify-between rounded-xl p-5 text-left"
+      >
+        <ActionCardBody action={action} pipelineName={pipelineName} />
+      </button>
+    )
+  }
   return (
-    <div className="relative flex min-h-36 w-full flex-col justify-between rounded-xl bg-surface p-5 text-left shadow-lift">
+    <div className="card-3d relative flex min-h-36 w-full flex-col justify-between rounded-xl p-5 text-left">
       <ActionCardBody action={action} pipelineName={pipelineName} />
     </div>
   )
@@ -224,7 +241,7 @@ function PipelineMenuCard({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        className="group relative flex min-h-36 w-full flex-col justify-between rounded-xl bg-surface p-5 text-left shadow-lift transition-colors duration-press hover:bg-surface-hover/50"
+        className="card-3d group relative flex min-h-36 w-full flex-col justify-between rounded-xl p-5 text-left"
       >
         <span
           aria-hidden
