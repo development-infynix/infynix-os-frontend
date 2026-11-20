@@ -1,8 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Pencil, Trash2, X } from 'lucide-react'
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { AlertDialog } from '@/components/Alert'
 import { Button } from '@/components/Button'
+import { Detail, Muted, Panel } from '@/components/DetailPanel'
+import { showDetailValue } from '@/lib/detail-value'
 import { FormError, FormField } from '@/components/FormField'
 import { ApiError } from '@/lib/api'
 import {
@@ -30,12 +32,6 @@ interface FieldErrors {
 }
 
 const dateFormat = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-
-const showValue = (value: string | number | boolean | null) => {
-  if (value === null) return '—'
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
-  return String(value)
-}
 
 /** A client in a right-side sheet: contact facts and custom details, with Edit and Delete below. */
 export function ClientDetailsDrawer({ client, onClose }: ClientDetailsDrawerProps) {
@@ -224,7 +220,7 @@ export function ClientDetailsDrawer({ client, onClose }: ClientDetailsDrawerProp
                     {entries.length ? (
                       entries.map(([key, value]) => (
                         <Detail key={key} label={key}>
-                          {showValue(value)}
+                          {showDetailValue(value)}
                         </Detail>
                       ))
                     ) : (
@@ -273,29 +269,4 @@ export function ClientDetailsDrawer({ client, onClose }: ClientDetailsDrawerProp
       />
     </>
   )
-}
-
-function Panel({ title, className = '', children }: { title: string; className?: string; children: ReactNode }) {
-  const id = useId()
-  return (
-    <section aria-labelledby={id} className={`overflow-hidden rounded-xl bg-surface shadow-lift ${className}`}>
-      <h3 id={id} className="border-b border-line bg-canvas/50 px-3.5 py-2 text-caption font-semibold text-ink-2">
-        {title}
-      </h3>
-      <dl className="divide-y divide-line">{children}</dl>
-    </section>
-  )
-}
-
-function Detail({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-[6.5rem_1fr] items-baseline gap-3 px-3.5 py-2.5">
-      <dt className="text-label font-medium text-ink-2">{label}</dt>
-      <dd className="min-w-0 break-words text-body text-ink">{children}</dd>
-    </div>
-  )
-}
-
-function Muted({ children }: { children: ReactNode }) {
-  return <span className="text-ink-3">{children}</span>
 }

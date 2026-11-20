@@ -17,16 +17,71 @@ export interface CrmBoard {
   pipeline: CrmPipeline
   stages: CrmStage[]
   columns: BoardColumns
-  /** Each stage's true count, even when only the first 100 cards are loaded. */
+  /** Each stage's true count, even when only some of its cards are loaded. */
   totals: Record<string, number>
 }
 
-/** One pipeline's board, loading up to 100 cards per stage. */
+export const crmBoardKey = (pipelineId: string) => [...CRM_KEY, 'board', pipelineId] as const
+
+/** Cards per column on first load, and per page as you scroll down a column. */
+export const CRM_PAGE_SIZE = 100
+/** Most cards one stage-page request returns (the backend's cap). */
+const STAGE_FETCH_MAX = 500
+
+export interface CrmStagePage {
+  items: CrmDeal[]
+  /** The stage's true count right now. */
+  total: number
+}
+
+/** Cards `offset` onwards of one column, in board order. */
+export const fetchCrmStageDeals = (stageId: string, offset: number, limit = CRM_PAGE_SIZE) =>
+  api<CrmStagePage>(`/crm/stages/${stageId}/deals?offset=${offset}&limit=${limit}`)
+
+/** `extra` appended to `cards`, skipping ids already there (offsets drift when cards move). */
+export function appendCards(cards: CrmDeal[], extra: CrmDeal[]): CrmDeal[] {
+  const seen = new Set(cards.map((card) => card.id))
+  return [...cards, ...extra.filter((card) => !seen.has(card.id))]
+}
+
+/**
+ * One pipeline's board: the first CRM_PAGE_SIZE cards of each stage. A
+ * refetch keeps the depth already scrolled to: a column that had loaded 300
+ * cards gets 300 back, rather than shrinking to 100 under the reader.
+ */
 export const crmBoardQuery = (pipelineId: string) =>
   queryOptions({
-    queryKey: [...CRM_KEY, 'board', pipelineId],
-    queryFn: () => api<CrmBoard>(`/crm/pipelines/${pipelineId}/board?limit=100`),
+    queryKey: crmBoardKey(pipelineId),
+    queryFn: async ({ client }) => {
+      const previous = client.getQueryData<CrmBoard>(crmBoardKey(pipelineId))
+      const board = await api<CrmBoard>(`/crm/pipelines/${pipelineId}/board?limit=${CRM_PAGE_SIZE}`)
+      if (!previous) return board
+      await Promise.all(
+        board.stages.map(async ({ id }) => {
+          const depth = previous.columns[id]?.length ?? 0
+          let cards = board.columns[id] ?? []
+          while (cards.length < depth && cards.length < (board.totals[id] ?? 0)) {
+            const page = await fetchCrmStageDeals(id, cards.length, Math.min(depth - cards.length, STAGE_FETCH_MAX))
+            const next = appendCards(cards, page.items)
+            board.totals[id] = page.total
+            if (next.length === cards.length) break // nothing new: stop rather than ask for the same slice again
+            cards = next
+          }
+          board.columns[id] = cards
+        }),
+      )
+      return board
+    },
     enabled: Boolean(pipelineId),
+  })
+
+/** One deal, fresh from the server: the details drawer opens with the card's copy and refreshes from this. */
+export const crmDealQuery = (dealId: string) =>
+  queryOptions({
+    queryKey: [...CRM_KEY, 'deal', dealId],
+    queryFn: () => api<CrmDeal>(`/crm/deals/${dealId}`),
+    enabled: Boolean(dealId),
+    staleTime: 0,
   })
 
 export interface CrmDealSearch {
@@ -84,6 +139,9 @@ export interface CreateDealInput {
 /** Adds a client (unless `clientId` is given) and its deal in one transaction. */
 export const createCrmDeal = (input: CreateDealInput) =>
   api<CrmDeal>('/crm/deals', { method: 'POST', body: JSON.stringify(input) })
+
+/** Shared by every card move, so the board can tell when the last pending one has finished. */
+export const CRM_MOVE_KEY = [...CRM_KEY, 'move-deal'] as const
 
 export const moveCrmDeal = (id: string, stageId: string, position: number) =>
   api<CrmDeal>(`/crm/deals/${id}`, {

@@ -8,6 +8,7 @@ import {
   useSensor,
   useSensors,
   type Announcements,
+  type AutoScrollOptions,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -29,6 +30,16 @@ export interface KanbanBoardHandle {
   scrollByColumn: (direction: -1 | 1) => void
 }
 
+/** A drop the board wants saved. */
+export interface BoardMove {
+  dealId: string
+  stageId: string
+  /** Index within the stage after the drop. */
+  position: number
+  /** The board as it was before this drag, to put back if the save fails. */
+  before: BoardColumns
+}
+
 export interface KanbanBoardProps {
   stages: CrmStage[]
   columns: BoardColumns
@@ -36,7 +47,13 @@ export interface KanbanBoardProps {
   /** Every stage's true count, so a capped column still shows its total. */
   totals?: Record<string, number>
   /** Persists a drop: the deal's new stage and index within it. */
-  onMove?: (dealId: string, stageId: string, position: number) => void
+  onMove?: (move: BoardMove) => void
+  /**
+   * True while a card is held. The page keeps refetches off the board meanwhile:
+   * the drag lives in the same cache, so a refetch landing mid-drag would yank
+   * the card back to where the server last had it.
+   */
+  onDraggingChange?: (dragging: boolean) => void
   selectable?: boolean
   selectedIds?: ReadonlySet<string>
   onToggleSelect?: (id: string) => void
@@ -46,11 +63,20 @@ export interface KanbanBoardProps {
   onView?: (deal: CrmDeal) => void
   onOptions?: (deal: CrmDeal) => void
   onScrollStateChange?: (state: BoardScrollState) => void
+  /** Loads a stage's next page as the reader nears the bottom of its column. */
+  onLoadMore?: (stageId: string) => void
+  /** Stages with a page request in flight. */
+  loadingStages?: ReadonlySet<string>
+  /** Stages whose last page request failed. */
+  failedStages?: ReadonlySet<string>
 }
 
 const NO_SELECTION: ReadonlySet<string> = new Set()
 const COLUMN_GAP = 16 // gap-4
 const noop = () => {}
+
+/** Whether the drag was started from the keyboard (Space/Enter on a focused card). */
+const isKeyboardDrag = (event: Event | null) => typeof KeyboardEvent !== 'undefined' && event instanceof KeyboardEvent
 
 /**
  * The pipeline board: one column per stage, cards sortable inside a column and
@@ -64,6 +90,7 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
     onColumnsChange,
     totals,
     onMove,
+    onDraggingChange,
     selectable = false,
     selectedIds = NO_SELECTION,
     onToggleSelect,
@@ -72,6 +99,9 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
     onView,
     onOptions,
     onScrollStateChange,
+    onLoadMore,
+    loadingStages = NO_SELECTION,
+    failedStages = NO_SELECTION,
   },
   ref,
 ) {
@@ -81,6 +111,24 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
   /** Where the card started, so a drop that changed nothing isn't saved. */
   const dragOrigin = useRef<{ stageId: string; index: number } | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
+  /** Set for keyboard drags: only they get focus put back on the card afterwards. */
+  const keyboardDrag = useRef(false)
+
+  /**
+   * Edge scrolling while a card is held. Only the board and its columns may
+   * scroll, never the page around them; a gentler zone and speed than the
+   * default stop it racing away; and no "layout shift" correction, which
+   * otherwise scrolls the board whenever a card jumps to another column.
+   */
+  const autoScroll = useMemo<AutoScrollOptions>(
+    () => ({
+      threshold: { x: 0.12, y: 0.12 },
+      acceleration: 6,
+      layoutShiftCompensation: false,
+      canScroll: (element) => scroller.current?.contains(element) ?? false,
+    }),
+    [],
+  )
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -122,7 +170,9 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
 
   const stageName = (id: string | null) => stages.find((stage) => stage.id === id)?.name ?? 'the board'
 
-  function onDragStart({ active }: DragStartEvent) {
+  function onDragStart({ active, activatorEvent }: DragStartEvent) {
+    keyboardDrag.current = isKeyboardDrag(activatorEvent)
+    onDraggingChange?.(true)
     snapshot.current = columns
     const stageId = findStage(active.id)
     const index = stageId
@@ -158,16 +208,30 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
     })
   }
 
+  /**
+   * dnd-kit's own focus restore calls focus() without preventScroll, so after a
+   * mouse drop the browser scrolled the board to wherever the card landed. It's
+   * off; keyboard users still get focus back on the card they moved.
+   */
+  function finishDrag(id: UniqueIdentifier) {
+    setActiveId(null)
+    if (keyboardDrag.current) {
+      requestAnimationFrame(() => document.getElementById(`deal-${String(id)}`)?.focus())
+    }
+    keyboardDrag.current = false
+  }
+
   function onDragEnd({ active, over }: DragEndEvent) {
     const origin = dragOrigin.current
     const before = snapshot.current
     dragOrigin.current = null
     snapshot.current = null
-    setActiveId(null)
+    finishDrag(active.id)
 
     // Dropped outside a column: put it back where it started.
     if (!over) {
       if (before) onColumnsChange(before)
+      onDraggingChange?.(false)
       return
     }
 
@@ -209,19 +273,23 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
       : -1
     if (
       origin &&
+      before &&
       finalStage &&
       finalIndex >= 0 &&
       (finalStage !== origin.stageId || finalIndex !== origin.index)
     ) {
-      onMove?.(String(active.id), finalStage, finalIndex)
+      onMove?.({ dealId: String(active.id), stageId: finalStage, position: finalIndex, before })
     }
+    // After onMove, so the save is already pending when the page looks for work to refetch.
+    onDraggingChange?.(false)
   }
 
-  function onDragCancel() {
+  function onDragCancel({ active }: { active: { id: UniqueIdentifier } }) {
     if (snapshot.current) onColumnsChange(snapshot.current)
     snapshot.current = null
     dragOrigin.current = null
-    setActiveId(null)
+    finishDrag(active.id)
+    onDraggingChange?.(false)
   }
 
   const announcements: Announcements = {
@@ -278,11 +346,13 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
     <DndContext
       sensors={sensors}
       collisionDetection={closestCorners}
+      autoScroll={autoScroll}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
       onDragCancel={onDragCancel}
       accessibility={{
+        restoreFocus: false,
         announcements,
         screenReaderInstructions: {
           draggable:
@@ -296,7 +366,9 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
         aria-label="Pipeline board"
         // Tablet and up: pinned to the edges of the page's board slot (see CrmPage), so its height is fixed and
         // every column scrolls its own cards instead of growing the page. Edge to edge: -10 on the sides, padded back.
-        className="-mx-5 flex gap-4 overflow-x-auto px-5 pb-3 [scrollbar-width:thin] max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-px-5 sm:absolute sm:inset-y-0 sm:-right-10 sm:-left-10 sm:mx-0 sm:px-10"
+        // overflow-y-hidden: overflow-x-auto alone makes the y axis scrollable too, so the board itself could
+        // drift up and down; only the columns scroll vertically.
+        className="-mx-5 flex gap-4 overflow-x-auto overflow-y-hidden px-5 pb-3 [scrollbar-width:thin] max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-px-5 sm:absolute sm:inset-y-0 sm:-right-10 sm:-left-10 sm:mx-0 sm:px-10"
       >
         {stages.map((stage, index) => (
           <KanbanColumn
@@ -313,6 +385,9 @@ export const KanbanBoard = forwardRef<KanbanBoardHandle, KanbanBoardProps>(funct
             onToggleSelect={onToggleSelect ?? noop}
             onView={onView}
             onOptions={onOptions}
+            onLoadMore={onLoadMore}
+            loadingMore={loadingStages.has(stage.id)}
+            loadMoreFailed={failedStages.has(stage.id)}
           />
         ))}
       </div>

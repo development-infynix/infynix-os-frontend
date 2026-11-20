@@ -40,9 +40,10 @@ export const KanbanCard = memo(function KanbanCard({
   return (
     <article
       aria-label={deal.name}
+      onClick={selectable ? () => onToggleSelect?.(deal.id) : undefined}
       className={`rounded-xl bg-surface p-4 transition-shadow duration-enter ease-out-expo ${
         overlay ? 'rotate-[1.5deg] cursor-grabbing shadow-dialog' : 'shadow-lift'
-      } ${selected || highlighted ? 'ring-2 ring-secondary' : ''}`}
+      } ${selectable ? 'cursor-pointer' : ''} ${selected || highlighted ? 'ring-2 ring-secondary' : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <h3 className="min-w-0 truncate text-body font-semibold text-ink">{deal.name}</h3>
@@ -52,7 +53,10 @@ export const KanbanCard = memo(function KanbanCard({
             role="checkbox"
             aria-checked={selected}
             aria-label={`Select ${deal.name}`}
-            onClick={() => onToggleSelect?.(deal.id)}
+            onClick={(event) => {
+              event.stopPropagation()
+              onToggleSelect?.(deal.id)
+            }}
             onKeyDown={keepKeys}
             className={`grid size-5 shrink-0 place-items-center rounded-full border transition-colors ${
               selected
@@ -89,7 +93,10 @@ export const KanbanCard = memo(function KanbanCard({
         <p className="text-caption text-ink-3 tabular-nums">Added {addedFormat.format(new Date(deal.addedAt))}</p>
         <button
           type="button"
-          onClick={() => onView?.(deal)}
+          onClick={(event) => {
+            event.stopPropagation()
+            onView?.(deal)
+          }}
           onKeyDown={keepKeys}
           className="btn btn-secondary h-7 gap-1 px-2.5 text-label"
         >

@@ -1,6 +1,7 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, ListChecks, Plus, Search } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ChevronDown, ChevronLeft, ChevronRight, Plus, Search } from 'lucide-react'
 import {
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -12,15 +13,31 @@ import { Button } from '@/components/Button'
 import { Loader } from '@/components/Loader'
 import { useSession } from '@/lib/auth'
 import { ApiError } from '@/lib/api'
-import { crmBoardQuery, crmPipelinesQuery, CRM_KEY, moveCrmDeal, type CrmBoard } from '@/lib/crm'
+import {
+  appendCards,
+  crmBoardKey,
+  crmBoardQuery,
+  crmPipelinesQuery,
+  CRM_KEY,
+  CRM_MOVE_KEY,
+  fetchCrmStageDeals,
+  moveCrmDeal,
+  type CrmBoard,
+} from '@/lib/crm'
 import { AddDealDialog } from '../components/AddDealDialog'
 import { CrmActions } from '../components/CrmActions'
+import { DealDetailsDrawer } from '../components/DealDetailsDrawer'
 import { AddPipelineDrawer } from '../components/AddPipelineDrawer'
 import { ManagePipelinesDrawer } from '../components/ManagePipelinesDrawer'
-import { KanbanBoard, type BoardScrollState, type KanbanBoardHandle } from '../components/KanbanBoard'
+import {
+  KanbanBoard,
+  type BoardMove,
+  type BoardScrollState,
+  type KanbanBoardHandle,
+} from '../components/KanbanBoard'
 import { PipelineSelect } from '../components/PipelineSelect'
 import { SearchDealsDialog } from '../components/SearchDealsDialog'
-import type { BoardColumns } from '../types'
+import type { BoardColumns, CrmDeal } from '../types'
 
 type Tab = 'pipeline' | 'actions'
 
@@ -61,6 +78,8 @@ export function CrmPage() {
   const [creatingPipeline, setCreatingPipeline] = useState(false)
   const [managingPipelines, setManagingPipelines] = useState(false)
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
+  /** The deal open in the details drawer (from a card's View or a search result). */
+  const [viewing, setViewing] = useState<CrmDeal | null>(null)
   const [pendingJump, setPendingJump] = useState<string | null>(null)
   const [moveError, setMoveError] = useState<string | null>(null)
   const [scroll, setScroll] = useState<BoardScrollState>({ canPrev: false, canNext: false })
@@ -153,28 +172,109 @@ export function CrmPage() {
     return () => window.clearTimeout(timer)
   }, [pendingJump, boardQuery.data])
 
-  /** Drag state lives in the board query, so a refetch or failure restores it. */
-  function updateColumns(next: BoardColumns) {
-    queryClient.setQueryData<CrmBoard>(
-      [...CRM_KEY, 'board', activePipelineId],
-      (current) => (current ? { ...current, columns: next } : current),
+  /** Drag state lives in the board query: the card shows where it was dropped before the save returns. */
+  function setColumns(pipelineId: string, next: BoardColumns) {
+    queryClient.setQueryData<CrmBoard>(crmBoardKey(pipelineId), (current) =>
+      current ? { ...current, columns: next } : current,
     )
   }
+  const updateColumns = (next: BoardColumns) => setColumns(activePipelineId, next)
 
-  async function moveDeal(dealId: string, stageId: string, position: number) {
-    setMoveError(null)
-    try {
-      await moveCrmDeal(dealId, stageId, position)
-      await queryClient.invalidateQueries({ queryKey: [...CRM_KEY, 'board', activePipelineId] })
-    } catch (caught) {
+  /** A card is held: refetches wait, since one landing mid-drag would put the card back. */
+  const dragging = useRef(false)
+  /** A refetch was skipped during the drag; run it once the drag is over. */
+  const refetchAfterDrag = useRef(false)
+
+  /**
+   * Fetches the board fresh, unless a card is held or another move is still
+   * saving: an earlier move's refetch would show the later ones undone.
+   * `settling` is 1 when called from a move's onSettled, which TanStack runs
+   * while that move still counts as pending.
+   */
+  function syncBoard(pipelineId: string, settling = 0) {
+    if (dragging.current) {
+      refetchAfterDrag.current = true
+      return
+    }
+    if (queryClient.isMutating({ mutationKey: CRM_MOVE_KEY }) > settling) return
+    void queryClient.invalidateQueries({ queryKey: crmBoardKey(pipelineId) })
+  }
+
+  function onDraggingChange(held: boolean) {
+    dragging.current = held
+    if (held) {
+      // A refetch already on its way would land on top of the drag.
+      void queryClient.cancelQueries({ queryKey: crmBoardKey(activePipelineId) })
+    } else if (refetchAfterDrag.current) {
+      refetchAfterDrag.current = false
+      syncBoard(activePipelineId)
+    }
+  }
+
+  /** Stages with a next-page request in flight; the ref guards against double requests between renders. */
+  const loadingRef = useRef(new Set<string>())
+  const [loadingStages, setLoadingStages] = useState<ReadonlySet<string>>(new Set())
+  const [failedStages, setFailedStages] = useState<ReadonlySet<string>>(new Set())
+
+  /** Appends a stage's next CRM_PAGE_SIZE cards, starting after the ones already loaded. */
+  const loadMore = useCallback(
+    async (stageId: string) => {
+      const pipelineId = activePipelineId
+      if (!pipelineId || loadingRef.current.has(stageId)) return
+      const loaded = queryClient.getQueryData<CrmBoard>(crmBoardKey(pipelineId))?.columns[stageId]?.length ?? 0
+      loadingRef.current.add(stageId)
+      setLoadingStages(new Set(loadingRef.current))
+      setFailedStages((current) => {
+        if (!current.has(stageId)) return current
+        const next = new Set(current)
+        next.delete(stageId)
+        return next
+      })
+      try {
+        const page = await fetchCrmStageDeals(stageId, loaded)
+        queryClient.setQueryData<CrmBoard>(crmBoardKey(pipelineId), (current) => {
+          if (!current) return current
+          const cards = appendCards(current.columns[stageId] ?? [], page.items)
+          // Nothing new (someone moved cards meanwhile): settle the count on what's loaded, or the
+          // column would keep asking for the same slice. The next refetch brings the true total back.
+          const total = cards.length === (current.columns[stageId]?.length ?? 0) ? cards.length : page.total
+          return {
+            ...current,
+            columns: { ...current.columns, [stageId]: cards },
+            totals: { ...current.totals, [stageId]: total },
+          }
+        })
+      } catch {
+        setFailedStages((current) => new Set(current).add(stageId))
+      } finally {
+        loadingRef.current.delete(stageId)
+        setLoadingStages(new Set(loadingRef.current))
+      }
+    },
+    [activePipelineId, queryClient],
+  )
+  const onLoadMore = useCallback((stageId: string) => void loadMore(stageId), [loadMore])
+
+  const moveMutation = useMutation({
+    mutationKey: CRM_MOVE_KEY,
+    mutationFn: (move: BoardMove & { pipelineId: string }) =>
+      moveCrmDeal(move.dealId, move.stageId, move.position),
+    onMutate: async ({ pipelineId }) => {
+      setMoveError(null)
+      await queryClient.cancelQueries({ queryKey: crmBoardKey(pipelineId) })
+    },
+    onError: (caught, { pipelineId, before }) => {
+      // Straight back to the board as it was before this drag; the refetch below confirms it.
+      setColumns(pipelineId, before)
       setMoveError(
         caught instanceof ApiError && caught.status !== 500
           ? caught.message
           : 'Couldn’t move that deal. It’s back where it was.',
       )
-      await queryClient.invalidateQueries({ queryKey: [...CRM_KEY, 'board', activePipelineId] })
-    }
-  }
+    },
+    // Only the last pending move refetches.
+    onSettled: (_data, _error, { pipelineId }) => syncBoard(pipelineId, 1),
+  })
 
   const retryPipelines = () => void queryClient.invalidateQueries({ queryKey: [...CRM_KEY, 'pipelines'] })
   const retryBoard = () =>
@@ -221,18 +321,9 @@ export function CrmPage() {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            {tab === 'pipeline' &&
-              (selecting ? (
-                <>
-                  <p className="text-label text-ink-2 tabular-nums" aria-live="polite">
-                    {selected.size} selected
-                  </p>
-                  <Button variant="secondary" onClick={stopSelecting}>
-                    Done
-                  </Button>
-                </>
-              ) : (
-                <>
+            {tab === 'pipeline' && (
+              <>
+                {!selecting && (
                   <Button
                     variant="secondary"
                     onClick={() => setSearching(true)}
@@ -244,17 +335,15 @@ export function CrmPage() {
                   >
                     <Search size={16} strokeWidth={2} aria-hidden />
                   </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setSelecting(true)}
-                    disabled={!pipeline}
-                    aria-label="Select deals"
-                    title="Select deals"
-                    className="w-9 px-0! sm:w-auto sm:px-3.5!"
-                  >
-                    <ListChecks size={16} strokeWidth={2} aria-hidden className="shrink-0" />
-                    <span className="hidden sm:inline">Select</span>
-                  </Button>
+                )}
+                <SelectDealsButton
+                  selecting={selecting}
+                  count={selected.size}
+                  disabled={!pipeline}
+                  onToggle={() => (selecting ? stopSelecting() : setSelecting(true))}
+                  onClear={stopSelecting}
+                />
+                {!selecting && (
                   <Button
                     variant="primary"
                     onClick={() => setAdding(true)}
@@ -267,8 +356,9 @@ export function CrmPage() {
                     <Plus size={16} strokeWidth={2.25} aria-hidden className="shrink-0" />
                     <span className="hidden sm:inline">Add deal</span>
                   </Button>
-                </>
-              ))}
+                )}
+              </>
+            )}
             <PipelineSelect
               pipelines={pipelines}
               value={pipeline?.id ?? ''}
@@ -371,7 +461,12 @@ export function CrmPage() {
                   columns={columns}
                   onColumnsChange={updateColumns}
                   totals={boardQuery.data?.totals}
-                  onMove={(dealId, stageId, position) => void moveDeal(dealId, stageId, position)}
+                  onMove={(move) => moveMutation.mutate({ ...move, pipelineId: activePipelineId })}
+                  onDraggingChange={onDraggingChange}
+                  onView={setViewing}
+                  onLoadMore={onLoadMore}
+                  loadingStages={loadingStages}
+                  failedStages={failedStages}
                   selectable={selecting}
                   selectedIds={selected}
                   onToggleSelect={toggleSelected}
@@ -400,7 +495,13 @@ export function CrmPage() {
           onOpenChange={setSearching}
           pipelineId={activePipelineId}
           stages={stages}
-          onPick={(deal) => jumpTo(deal.id)}
+          onPick={setViewing}
+        />
+        <DealDetailsDrawer
+          deal={viewing}
+          pipelineName={pipeline?.name ?? 'this pipeline'}
+          stages={stages}
+          onClose={() => setViewing(null)}
         />
         <AddDealDialog
           open={adding}
@@ -439,6 +540,124 @@ function LoadFailure({ message, onRetry }: { message: string; onRetry: () => voi
           Try again
         </Button>
       </div>
+    </div>
+  )
+}
+
+interface SelectDealsButtonProps {
+  selecting: boolean
+  count: number
+  disabled: boolean
+  onToggle: () => void
+  onClear: () => void
+}
+
+function SelectDealsButton({ selecting, count, disabled, onToggle, onClear }: SelectDealsButtonProps) {
+  const [open, setOpen] = useState(false)
+  const hasSelection = count > 0
+  const [wasSplit, setWasSplit] = useState(selecting && hasSelection)
+  const ref = useRef<HTMLDivElement>(null)
+  const menuId = useId()
+  const split = selecting && hasSelection
+
+  // Drop a stale menu when the split button collapses.
+  if (split !== wasSplit) {
+    setWasSplit(split)
+    if (!split) setOpen(false)
+  }
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <div
+        className={`btn ${selecting ? 'btn-primary' : 'btn-secondary'} h-9 gap-0! p-0! text-body ${
+          disabled ? 'opacity-60' : ''
+        }`}
+      >
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={disabled}
+          aria-label={hasSelection ? `Select deals, ${count} selected` : 'Select deals'}
+          aria-pressed={selecting}
+          title="Select deals"
+          className={`flex h-full items-center px-3.5! ${split ? 'rounded-l-lg' : 'rounded-lg'}`}
+        >
+          <span className="hidden tabular-nums sm:inline">
+            Select{hasSelection ? ` (${count})` : ''}
+          </span>
+        </button>
+        {split && (
+          <>
+            <span aria-hidden className={`h-5 w-px shrink-0 ${selecting ? 'bg-white/35' : 'bg-ink-3/40'}`} />
+            <button
+              type="button"
+              onClick={() => setOpen((next) => !next)}
+              aria-label="Selection actions"
+              aria-haspopup="menu"
+              aria-expanded={open}
+              aria-controls={open ? menuId : undefined}
+              className="flex h-full items-center rounded-r-lg px-2"
+            >
+              <ChevronDown
+                size={16}
+                strokeWidth={2}
+                aria-hidden
+                className={`transition-transform duration-press ${open ? 'rotate-180' : ''}`}
+              />
+            </button>
+          </>
+        )}
+      </div>
+      {split && open && (
+        <ul
+          id={menuId}
+          role="menu"
+          aria-label="Selection actions"
+          className="absolute right-0 z-30 mt-1 w-44 rounded-lg bg-surface py-1 shadow-dialog"
+        >
+          {['Move to pipeline', 'Add to pipeline', 'Delete'].map((label) => (
+            <li key={label} role="none">
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center px-3 py-2 text-left text-body text-ink-2 hover:bg-surface-hover hover:text-ink"
+              >
+                {label}
+              </button>
+            </li>
+          ))}
+          <li role="separator" className="my-1 border-t border-line" />
+          <li role="none">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onClear()
+                setOpen(false)
+              }}
+              className="flex w-full items-center px-3 py-2 text-left text-body font-medium text-danger hover:bg-danger-soft"
+            >
+              Clear selection
+            </button>
+          </li>
+        </ul>
+      )}
     </div>
   )
 }

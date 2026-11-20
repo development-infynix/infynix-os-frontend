@@ -1,6 +1,7 @@
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { memo, useMemo } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import type { CrmDeal, CrmStage } from '../types'
 import { SortableKanbanCard } from './KanbanCard'
 
@@ -20,7 +21,15 @@ export interface KanbanColumnProps {
   onToggleSelect: (id: string) => void
   onView?: (deal: CrmDeal) => void
   onOptions?: (deal: CrmDeal) => void
+  /** Asks for this stage's next page; called as the reader nears the bottom of the loaded cards. */
+  onLoadMore?: (stageId: string) => void
+  loadingMore?: boolean
+  /** The last page request failed: show Retry instead of loading again on its own. */
+  loadMoreFailed?: boolean
 }
+
+/** Start the next page this far before the bottom, so scrolling rarely meets the loader. */
+const LOAD_AHEAD = '0px 0px 600px 0px'
 
 /** One stage: a header with its count and share, then its cards (a drop target even when empty). */
 export const KanbanColumn = memo(function KanbanColumn({
@@ -36,10 +45,41 @@ export const KanbanColumn = memo(function KanbanColumn({
   onToggleSelect,
   onView,
   onOptions,
+  onLoadMore,
+  loadingMore = false,
+  loadMoreFailed = false,
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
   const ids = useMemo(() => deals.map((deal) => deal.id), [deals])
   const count = total ?? deals.length
+  const hasMore = count > deals.length
+
+  // The card list is both the drop target and the scroll box the next page watches.
+  const [list, setList] = useState<HTMLDivElement | null>(null)
+  const listRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      setNodeRef(node)
+      setList(node)
+    },
+    [setNodeRef],
+  )
+  const sentinel = useRef<HTMLDivElement>(null)
+  const canLoad = hasMore && !loadingMore && !loadMoreFailed && Boolean(onLoadMore)
+
+  // Re-created after every page (deals.length), so a column still short of the
+  // bottom keeps loading until it fills or runs out.
+  useEffect(() => {
+    const target = sentinel.current
+    if (!canLoad || !list || !target) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) onLoadMore?.(stage.id)
+      },
+      { root: list, rootMargin: LOAD_AHEAD },
+    )
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [canLoad, list, onLoadMore, stage.id, deals.length])
   const share = boardTotal ? Math.round((count / boardTotal) * 100) : 0
   const headingId = `stage-${stage.id}-heading`
 
@@ -80,8 +120,9 @@ export const KanbanColumn = memo(function KanbanColumn({
       </header>
 
       <div
-        ref={setNodeRef}
-        className={`flex max-h-[65dvh] min-h-72 flex-1 flex-col overflow-y-auto overscroll-contain rounded-xl border p-2 transition-colors duration-press [scrollbar-width:thin] sm:max-h-none sm:min-h-0 ${
+        ref={listRef}
+        // Contain only the vertical axis: a sideways two-finger swipe over the cards must pass to the board.
+        className={`flex max-h-[65dvh] min-h-72 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain rounded-xl border p-2 transition-colors duration-press [scrollbar-width:thin] sm:max-h-none sm:min-h-0 ${
           isOver ? 'border-line-strong bg-surface-hover/60' : 'border-line bg-surface/40'
         }`}
       >
@@ -102,12 +143,30 @@ export const KanbanColumn = memo(function KanbanColumn({
                 />
               ))}
             </ul>
-          ) : (
+          ) : !hasMore ? (
             <div className="grid flex-1 place-items-center rounded-lg border border-dashed border-line-strong px-6 py-10 text-center">
               <div>
                 <p className="text-label font-medium text-ink-2">No deals in this stage</p>
                 <p className="mt-1 text-caption text-ink-3">Drag a deal here to move it.</p>
               </div>
+            </div>
+          ) : null}
+          {hasMore && (
+            <div ref={sentinel} className="flex justify-center py-4">
+              {loadMoreFailed ? (
+                <button
+                  type="button"
+                  onClick={() => onLoadMore?.(stage.id)}
+                  className="btn btn-secondary h-7 px-2.5 text-label"
+                >
+                  Couldn’t load more. Retry
+                </button>
+              ) : (
+                <span role="status" aria-live="polite">
+                  <Loader2 size={18} strokeWidth={2} className="animate-spin text-ink-3" aria-hidden />
+                  <span className="sr-only">{`Loading more ${stage.name} deals`}</span>
+                </span>
+              )}
             </div>
           )}
         </SortableContext>

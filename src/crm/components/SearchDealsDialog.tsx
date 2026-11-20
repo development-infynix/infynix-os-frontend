@@ -12,11 +12,15 @@ interface SearchDealsDialogProps {
   onOpenChange: (open: boolean) => void
   pipelineId: string
   stages: CrmStage[]
-  /** Jumps to the card on the board. */
+  /** Opens the deal's details. */
   onPick: (deal: CrmDeal) => void
 }
 
-/** Finds a deal in the current pipeline by client name, email or phone. */
+/**
+ * Finds a deal in the current pipeline by client name, email or phone. The
+ * search runs on the server (debounced) and only ever covers this pipeline's
+ * deals, not the whole client directory.
+ */
 export function SearchDealsDialog({ open, onOpenChange, pipelineId, stages, onPick }: SearchDealsDialogProps) {
   const [q, setQ] = useState('')
   const term = q.trim()
@@ -55,7 +59,8 @@ export function SearchDealsDialog({ open, onOpenChange, pipelineId, stages, onPi
           />
         </label>
 
-        <div className="mt-3 max-h-80 overflow-y-auto" aria-live="polite">
+        {/* A floor so the empty and loading states don't leave the modal cramped; grows with results, then scrolls. */}
+        <div className="mt-3 min-h-48 max-h-[min(26rem,55dvh)] overflow-y-auto" aria-live="polite">
           {!term ? (
             <p className="py-6 text-center text-label text-ink-3">Type to search this pipeline.</p>
           ) : search.isError ? (
