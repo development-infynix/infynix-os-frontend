@@ -11,6 +11,7 @@ import {
   CLIENT_IMPORTS_KEY,
   deleteClientImport,
   deleteImportClientChunk,
+  IMPORT_DELETE_CHUNK,
   renameClientImport,
   type ClientImport,
 } from '@/lib/clients'
@@ -80,7 +81,8 @@ export function ClientImportCard({
     }
   }
 
-  const chunkedDelete = item.createdCount > 100
+  // Big imports clear their clients in chunks first, so the progress bar can move.
+  const chunkedDelete = item.createdCount > IMPORT_DELETE_CHUNK
   const deletePercent = deleteProgress?.total
     ? Math.round((deleteProgress.current / deleteProgress.total) * 100)
     : 0
@@ -256,7 +258,7 @@ export function ClientImportCard({
               let total = item.createdCount
               setDeleteProgress({ current: 0, total })
               while (true) {
-                const batch = await deleteImportClientChunk(item.id, 100)
+                const batch = await deleteImportClientChunk(item.id)
                 total = batch.deleted + batch.remaining
                 setDeleteProgress({ current: total - batch.remaining, total })
                 if (batch.remaining === 0) break

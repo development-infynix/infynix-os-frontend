@@ -6,6 +6,18 @@ import { api } from './api'
 export const CRM_KEY = ['crm'] as const
 export const CRM_PIPELINES_KEY = [...CRM_KEY, 'pipelines'] as const
 
+/** Where the CRM page remembers the pipeline last open. */
+export const CRM_PIPELINE_STORAGE_KEY = 'infynix-crm-pipeline'
+
+/** The pipeline last open, if remembered (storage can be blocked, e.g. private mode). */
+export function readStoredPipelineId(): string | null {
+  try {
+    return localStorage.getItem(CRM_PIPELINE_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
 /** All pipelines, each with its stages in board order. */
 export const crmPipelinesQuery = () =>
   queryOptions({

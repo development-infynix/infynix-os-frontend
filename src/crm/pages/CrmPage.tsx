@@ -20,6 +20,7 @@ import {
   crmPipelinesQuery,
   CRM_KEY,
   CRM_MOVE_KEY,
+  CRM_PIPELINE_STORAGE_KEY,
   fetchCrmStageDeals,
   moveCrmDeal,
   type CrmBoard,
@@ -42,7 +43,6 @@ import type { BoardColumns, CrmDeal } from '../types'
 type Tab = 'pipeline' | 'actions'
 
 const TAB_STORAGE_KEY = 'infynix-crm-tab'
-const PIPELINE_STORAGE_KEY = 'infynix-crm-pipeline'
 
 function readStored(key: string): string | null {
   try {
@@ -70,7 +70,7 @@ export function CrmPage() {
   const queryClient = useQueryClient()
 
   const [tab, setTab] = useState<Tab>(() => (readStored(TAB_STORAGE_KEY) === 'actions' ? 'actions' : 'pipeline'))
-  const [selectedPipelineId, setSelectedPipelineId] = useState(() => readStored(PIPELINE_STORAGE_KEY) ?? '')
+  const [selectedPipelineId, setSelectedPipelineId] = useState(() => readStored(CRM_PIPELINE_STORAGE_KEY) ?? '')
   const [selecting, setSelecting] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [searching, setSearching] = useState(false)
@@ -88,7 +88,8 @@ export function CrmPage() {
   const pipelinesQuery = useQuery(crmPipelinesQuery())
   const pipelines = pipelinesQuery.data ?? []
   const pipeline = pipelines.find((item) => item.id === selectedPipelineId) ?? pipelines[0]
-  const activePipelineId = pipeline?.id ?? ''
+  // Until the list arrives, ask for the remembered pipeline's board right away rather than after it.
+  const activePipelineId = pipeline?.id ?? (pipelinesQuery.isPending ? selectedPipelineId : '')
 
   const boardQuery = useQuery(crmBoardQuery(activePipelineId))
   const columns = boardQuery.data?.columns ?? {}
@@ -102,7 +103,7 @@ export function CrmPage() {
     const list = pipelinesQuery.data
     if (!list?.length) return
     writeStored(
-      PIPELINE_STORAGE_KEY,
+      CRM_PIPELINE_STORAGE_KEY,
       list.some((item) => item.id === selectedPipelineId) ? selectedPipelineId : list[0].id,
     )
   }, [pipelinesQuery.data, selectedPipelineId])

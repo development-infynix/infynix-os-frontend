@@ -152,7 +152,10 @@ export const renameClientImport = (id: string, name: string) =>
     body: JSON.stringify({ name }),
   })
 
-export const deleteImportClientChunk = (id: string, limit = 100) =>
+/** Clients removed per request when deleting a large import (the endpoint's maximum). */
+export const IMPORT_DELETE_CHUNK = 500
+
+export const deleteImportClientChunk = (id: string, limit = IMPORT_DELETE_CHUNK) =>
   api<{ deleted: number; remaining: number }>(`/client-imports/${id}/clients?limit=${limit}`, {
     method: 'DELETE',
   })
