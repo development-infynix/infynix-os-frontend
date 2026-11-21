@@ -94,7 +94,7 @@ export function Sidebar({ onClose, collapsed = false, onToggleCollapse }: Sideba
           <div className="flex min-w-0 flex-1 items-center px-1.5">
             <p className="flex min-w-0 items-baseline gap-1.5">
               <span className="truncate font-azonix text-[20px] font-normal uppercase leading-none tracking-[0.04em] text-ink">
-                Infynix
+                Agency
               </span>
               <span className="wordmark-os font-candy-cane text-[26px] font-normal leading-none text-secondary-text">OS</span>
             </p>
@@ -183,7 +183,7 @@ export function Sidebar({ onClose, collapsed = false, onToggleCollapse }: Sideba
       <AlertDialog
         open={confirmSignOut}
         onOpenChange={setConfirmSignOut}
-        title="Sign out of Infynix OS?"
+        title="Sign out of AgencyOS?"
         description={
           <>
             You’ll need your email and password to sign back in as{' '}

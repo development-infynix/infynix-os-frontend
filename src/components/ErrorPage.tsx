@@ -46,7 +46,7 @@ export function ErrorPage({ error, reset }: ErrorComponentProps) {
             />
           )}
           <h1 className="text-display-sm font-semibold leading-tight tracking-display text-ink">
-            {offline ? 'Can’t reach Infynix' : server ? 'Infynix is having trouble' : 'Something went wrong'}
+            {offline ? 'Can’t reach servers' : server ? 'Infynix is having trouble' : 'Something went wrong'}
           </h1>
           <p className="mt-2 max-w-[40ch] text-body text-ink-2">
             {offline

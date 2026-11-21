@@ -19,7 +19,7 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
       <main className="flex flex-1 items-start justify-center px-4 pt-[6vh] pb-16 sm:items-center sm:pt-0">
         <div className="w-full max-w-auth">
           <div className="mb-6">
-            <img src="/infynixicon.svg" alt="Infynix" width={36} height={36} className="mb-5 dark:brightness-[1.35]" />
+            <img src="/infynixicon.svg" alt="AgencyOS" width={36} height={36} className="mb-5 dark:brightness-[1.35]" />
             <h1 className="text-display-sm font-semibold leading-tight tracking-display text-ink">{title}</h1>
             <p className="mt-1.5 text-body text-ink-2">{subtitle}</p>
           </div>

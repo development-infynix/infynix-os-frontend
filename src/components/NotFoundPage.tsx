@@ -10,13 +10,13 @@ export function NotFoundPage() {
       </header>
       <main className="flex flex-1 items-start justify-center px-4 pt-[12vh] sm:items-center sm:pt-0">
         <div className="w-full max-w-auth">
-          <img src="/infynixicon.svg" alt="Infynix" width={36} height={36} className="mb-5 dark:brightness-[1.35]" />
+          <img src="/infynixicon.svg" alt="AgencyOS" width={36} height={36} className="mb-5 dark:brightness-[1.35]" />
           <h1 className="text-display-sm font-semibold leading-tight tracking-display text-ink">Page not found</h1>
           <p className="mt-1.5 text-body text-ink-2">
-            This address doesn’t exist in Infynix OS. It may be an old link.
+            This address doesn’t exist in AgencyOS. It may be an old link.
           </p>
           <Link to="/" className="btn btn-primary mt-6 h-10 px-4 text-body">
-            Go to Infynix OS
+            Go to AgencyOS
           </Link>
         </div>
       </main>

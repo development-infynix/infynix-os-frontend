@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { History, X } from 'lucide-react'
+import { Check, ChevronDown, History, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Detail, Muted, Panel } from '@/components/DetailPanel'
 import { showDetailValue } from '@/lib/detail-value'
@@ -85,25 +85,16 @@ export function DealDetailsDrawer({ deal, pipelineName, stages, canManage = fals
     >
       {shown && (
         <div className="flex h-full flex-col">
-          <div className="border-b border-line px-4 pt-3.5 pb-3">
-            <div className="flex items-center gap-2">
-              <h2 id={titleId} className="min-w-0 flex-1 truncate text-title font-semibold tracking-title">
-                {shown.name}
-              </h2>
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close"
-                className="grid size-9 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-surface-hover hover:text-ink"
-              >
-                <X size={18} strokeWidth={1.9} />
-              </button>
-            </div>
+          <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+            {/* The name is in the Client panel below; it stays here only as the dialog's label. */}
+            <h2 id={titleId} className="sr-only">
+              {shown.name}
+            </h2>
             <div
               role="tablist"
               aria-label="Deal sections"
               onKeyDown={onTabKeyDown}
-              className="mt-3 flex w-fit gap-1 rounded-xl bg-canvas p-1.5 shadow-well"
+              className="flex w-fit gap-1 rounded-xl bg-canvas p-1.5 shadow-well"
             >
               <TabButton id={detailsTabId} controls={panelId} selected={tab === 'details'} onSelect={() => setTab('details')}>
                 Details
@@ -112,6 +103,14 @@ export function DealDetailsDrawer({ deal, pipelineName, stages, canManage = fals
                 History
               </TabButton>
             </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="ml-auto grid size-9 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-surface-hover hover:text-ink"
+            >
+              <X size={18} strokeWidth={1.9} />
+            </button>
           </div>
 
           <div
@@ -127,7 +126,14 @@ export function DealDetailsDrawer({ deal, pipelineName, stages, canManage = fals
                     This deal is no longer in the pipeline.
                   </p>
                 )}
-                <Panel title="Deal">
+                <Panel title="Client">
+                  <Detail label="Name">{shown.name}</Detail>
+                  <Detail label="Email">
+                    {shown.email ? <span className="break-all">{shown.email}</span> : <Muted>Not provided</Muted>}
+                  </Detail>
+                  <Detail label="Phone">{shown.phone ? <span>{shown.phone}</span> : <Muted>Not provided</Muted>}</Detail>
+                </Panel>
+                <Panel title="Deal" className="mt-4">
                   <Detail label="Stage">
                     {stageName ? (
                       <span className="rounded-md bg-surface-hover px-2 py-0.5 text-label font-medium text-ink-2">
@@ -144,13 +150,6 @@ export function DealDetailsDrawer({ deal, pipelineName, stages, canManage = fals
                   <Detail label="Added">
                     <span className="tabular-nums">{dateFormat.format(new Date(shown.addedAt))}</span>
                   </Detail>
-                </Panel>
-                <Panel title="Client" className="mt-4">
-                  <Detail label="Name">{shown.name}</Detail>
-                  <Detail label="Email">
-                    {shown.email ? <span className="break-all">{shown.email}</span> : <Muted>Not provided</Muted>}
-                  </Detail>
-                  <Detail label="Phone">{shown.phone ? <span>{shown.phone}</span> : <Muted>Not provided</Muted>}</Detail>
                 </Panel>
                 <Panel title="Custom details" className="mt-4">
                   {entries.length ? (
@@ -218,6 +217,28 @@ function OwnerPicker({ deal, canManage }: { deal: CrmDeal; canManage: boolean })
   const people = useQuery({ ...crmAssignmentQuery(deal.pipelineId), enabled: canManage })
   const [saving, setSaving] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      // Close the list only, not the drawer (the dialog's cancel is Escape's default action).
+      event.preventDefault()
+      event.stopPropagation()
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKey, true)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKey, true)
+    }
+  }, [open])
 
   if (!canManage) return deal.ownerName ? <span>{deal.ownerName}</span> : <Muted>Unassigned</Muted>
 
@@ -240,22 +261,62 @@ function OwnerPicker({ deal, canManage }: { deal: CrmDeal; canManage: boolean })
     }
   }
 
+  const options = [{ userId: '', fullName: 'Unassigned' }, ...current, ...eligible]
+  const selected = options.find((o) => o.userId === (deal.ownerId ?? '')) ?? options[0]
+
   return (
-    <div>
-      <select
-        aria-label="Deal owner"
-        value={deal.ownerId ?? ''}
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((next) => !next)}
         disabled={saving || people.isPending}
-        onChange={(event) => void change(event.target.value || null)}
-        className="field-input h-9 py-0"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Deal owner: ${selected.fullName}`}
+        className="btn btn-secondary flex h-9 w-full items-center justify-between px-3 text-body font-normal disabled:opacity-60"
       >
-        <option value="">Unassigned</option>
-        {[...current, ...eligible].map((person) => (
-          <option key={person.userId} value={person.userId}>
-            {person.fullName}
-          </option>
-        ))}
-      </select>
+        <span className={`truncate ${deal.ownerId ? 'text-ink' : 'text-ink-3'}`}>
+          {saving ? 'Saving…' : selected.fullName}
+        </span>
+        <ChevronDown
+          size={15}
+          strokeWidth={2}
+          aria-hidden
+          className={`shrink-0 text-ink-3 transition-transform duration-press ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Deal owner"
+          className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg bg-surface py-1 shadow-dialog"
+        >
+          {options.map((person) => {
+            const isSelected = person.userId === (deal.ownerId ?? '')
+            return (
+              <li key={person.userId || 'none'} role="presentation">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    setOpen(false)
+                    if (!isSelected) void change(person.userId || null)
+                  }}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-body ${
+                    isSelected
+                      ? 'bg-secondary-soft font-medium text-secondary-text'
+                      : 'text-ink-2 hover:bg-surface-hover hover:text-ink'
+                  }`}
+                >
+                  <span className="flex-1 truncate">{person.fullName}</span>
+                  {isSelected && <Check size={14} strokeWidth={2} aria-hidden />}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
       {problem && <p className="mt-1 text-caption text-danger">{problem}</p>}
     </div>
   )
