@@ -11,7 +11,7 @@ export interface KanbanCardProps {
   selected?: boolean
   onToggleSelect?: (id: string) => void
   onView?: (deal: CrmDeal) => void
-  onOptions?: (deal: CrmDeal) => void
+  onOptions?: (deal: CrmDeal, anchor: HTMLElement) => void
   /** Flash after a search result jumps to this card. */
   highlighted?: boolean
   /** The floating copy under the pointer while dragging. */
@@ -71,7 +71,11 @@ export const KanbanCard = memo(function KanbanCard({
             type="button"
             aria-label={`Options for ${deal.name}`}
             title="Options"
-            onClick={() => onOptions?.(deal)}
+            aria-haspopup="menu"
+            onClick={(event) => {
+              event.stopPropagation()
+              onOptions?.(deal, event.currentTarget)
+            }}
             onKeyDown={keepKeys}
             className="-mt-1 -mr-1 grid size-7 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-hover hover:text-ink"
           >

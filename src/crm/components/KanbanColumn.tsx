@@ -20,7 +20,7 @@ export interface KanbanColumnProps {
   dragDisabled: boolean
   onToggleSelect: (id: string) => void
   onView?: (deal: CrmDeal) => void
-  onOptions?: (deal: CrmDeal) => void
+  onOptions?: (deal: CrmDeal, anchor: HTMLElement) => void
   /** Asks for this stage's next page; called as the reader nears the bottom of the loaded cards. */
   onLoadMore?: (stageId: string) => void
   loadingMore?: boolean

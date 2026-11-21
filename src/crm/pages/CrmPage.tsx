@@ -9,6 +9,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react'
+import { AlertDialog } from '@/components/Alert'
 import { Button } from '@/components/Button'
 import { Loader } from '@/components/Loader'
 import { hasAccess } from '@/lib/access'
@@ -21,6 +22,9 @@ import {
   crmBoardQuery,
   crmPipelinesQuery,
   CRM_KEY,
+  deleteCrmDeal,
+  deleteCrmDeals,
+  TRANSFER_CHUNK,
   CRM_MOVE_KEY,
   CRM_PIPELINE_STORAGE_KEY,
   fetchCrmStageDeals,
@@ -33,6 +37,7 @@ import { AssignDealsDrawer } from '../components/assign/AssignDealsDrawer'
 import { DealTransferDrawer, type TransferAction } from '../components/DealTransferDrawer'
 import { CrmActions } from '../components/CrmActions'
 import { DealDetailsDrawer } from '../components/DealDetailsDrawer'
+import { DealOptionsMenu } from '../components/DealOptionsMenu'
 import { AddPipelineDrawer } from '../components/AddPipelineDrawer'
 import { ManagePipelinesDrawer } from '../components/ManagePipelinesDrawer'
 import { ManageStageDrawer } from '../components/ManageStageDrawer'
@@ -82,6 +87,17 @@ export function CrmPage() {
   const [selectedPipelineId, setSelectedPipelineId] = useState(() => readStored(CRM_PIPELINE_STORAGE_KEY) ?? '')
   const [selecting, setSelecting] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  /** A card's options menu: the deal and the settings button it opened from. */
+  const [dealMenu, setDealMenu] = useState<{ deal: CrmDeal; anchor: HTMLElement } | null>(null)
+  /** The deal whose options › Delete is being confirmed. */
+  const [deletingDeal, setDeletingDeal] = useState<CrmDeal | null>(null)
+  const closeDealMenu = useCallback(() => setDealMenu(null), [])
+  const openDealMenu = useCallback(
+    (deal: CrmDeal, anchor: HTMLElement) =>
+      setDealMenu((current) => (current?.deal.id === deal.id ? null : { deal, anchor })),
+    [],
+  )
   const [searching, setSearching] = useState(false)
   const [adding, setAdding] = useState(false)
   const [addingFromImports, setAddingFromImports] = useState(false)
@@ -89,6 +105,8 @@ export function CrmPage() {
   const [transferringDeals, setTransferringDeals] = useState(false)
   /** Add or Move, from the Deal transfer card's menu; kept while the drawer slides shut. */
   const [transferAction, setTransferAction] = useState<TransferAction>('move')
+  /** Select › Move / Add: the selected deal ids, frozen when the drawer opens. */
+  const [transferIds, setTransferIds] = useState<string[] | undefined>(undefined)
   const [importingData, setImportingData] = useState(false)
   const [creatingPipeline, setCreatingPipeline] = useState(false)
   const [managingPipelines, setManagingPipelines] = useState(false)
@@ -175,6 +193,20 @@ export function CrmPage() {
   function stopSelecting() {
     setSelecting(false)
     setSelected(new Set())
+  }
+
+  /** Select › Delete: 500 per request; the dialog shows any error and stays open. */
+  async function deleteSelected() {
+    const ids = [...selected]
+    try {
+      for (let index = 0; index < ids.length; index += TRANSFER_CHUNK) {
+        await deleteCrmDeals(ids.slice(index, index + TRANSFER_CHUNK))
+      }
+      stopSelecting()
+    } finally {
+      // Refresh even after a partial failure, so the board shows what's left.
+      await queryClient.invalidateQueries({ queryKey: CRM_KEY })
+    }
   }
 
   /** Scrolls the card into view and flashes it. */
@@ -388,6 +420,16 @@ export function CrmPage() {
                   disabled={!pipeline}
                   onToggle={() => (selecting ? stopSelecting() : setSelecting(true))}
                   onClear={stopSelecting}
+                  onDelete={() => setConfirmingDelete(true)}
+                  onTransfer={
+                    canManage
+                      ? (action) => {
+                          setTransferAction(action)
+                          setTransferIds([...selected])
+                          setTransferringDeals(true)
+                        }
+                      : undefined
+                  }
                 />
                 {!selecting &&
                   (canUseClients ? (
@@ -526,6 +568,7 @@ export function CrmPage() {
                   onMove={(move) => moveMutation.mutate({ ...move, pipelineId: activePipelineId })}
                   onDraggingChange={onDraggingChange}
                   onView={setViewing}
+                  onOptions={openDealMenu}
                   onLoadMore={onLoadMore}
                   loadingStages={loadingStages}
                   failedStages={failedStages}
@@ -553,6 +596,7 @@ export function CrmPage() {
                 canManage && pipeline
                   ? (action) => {
                       setTransferAction(action)
+                      setTransferIds(undefined)
                       setTransferringDeals(true)
                     }
                   : undefined
@@ -593,11 +637,59 @@ export function CrmPage() {
           onOpenChange={setManagingStages}
           pipelineId={activePipelineId}
         />
+        <DealOptionsMenu
+          anchor={dealMenu?.anchor ?? null}
+          dealName={dealMenu?.deal.name ?? ''}
+          onClose={closeDealMenu}
+          onTransfer={
+            canManage && dealMenu
+              ? (action) => {
+                  setTransferAction(action)
+                  setTransferIds([dealMenu.deal.id])
+                  setTransferringDeals(true)
+                }
+              : undefined
+          }
+          onDelete={() => dealMenu && setDeletingDeal(dealMenu.deal)}
+        />
+        <AlertDialog
+          open={deletingDeal !== null}
+          onOpenChange={(next) => !next && setDeletingDeal(null)}
+          tone="danger"
+          icon={null}
+          width="compact"
+          title={`Delete ${deletingDeal?.name ?? 'this deal'}?`}
+          description={`The deal will be removed from ${pipeline?.name ?? 'this pipeline'}. The client stays in your directory. This can’t be undone.`}
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          onConfirm={async () => {
+            if (!deletingDeal) return
+            try {
+              await deleteCrmDeal(deletingDeal.id)
+            } finally {
+              await queryClient.invalidateQueries({ queryKey: CRM_KEY })
+            }
+          }}
+        />
+        <AlertDialog
+          open={confirmingDelete}
+          onOpenChange={setConfirmingDelete}
+          tone="danger"
+          icon={null}
+          width="compact"
+          title={`Delete ${selected.size} deal${selected.size === 1 ? '' : 's'}?`}
+          description={`${selected.size === 1 ? 'It' : 'They'}’ll be removed from ${pipeline?.name ?? 'this pipeline'}. The clients stay in your directory. This can’t be undone.`}
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          onConfirm={deleteSelected}
+        />
         {pipeline && canManage && (
           <DealTransferDrawer
             open={transferringDeals}
             onOpenChange={setTransferringDeals}
             action={transferAction}
+            dealIds={transferIds}
+            onDone={transferIds && selecting ? stopSelecting : undefined}
             pipeline={{ ...pipeline, stages }}
             pipelines={pipelines}
             totals={boardQuery.data?.totals ?? {}}
@@ -768,9 +860,12 @@ interface SelectDealsButtonProps {
   disabled: boolean
   onToggle: () => void
   onClear: () => void
+  onDelete: () => void
+  /** Select › Move / Add to pipeline; absent for staff (Owner and managers only). */
+  onTransfer?: (action: TransferAction) => void
 }
 
-function SelectDealsButton({ selecting, count, disabled, onToggle, onClear }: SelectDealsButtonProps) {
+function SelectDealsButton({ selecting, count, disabled, onToggle, onClear, onDelete, onTransfer }: SelectDealsButtonProps) {
   const [open, setOpen] = useState(false)
   const hasSelection = count > 0
   const [wasSplit, setWasSplit] = useState(selecting && hasSelection)
@@ -849,11 +944,26 @@ function SelectDealsButton({ selecting, count, disabled, onToggle, onClear }: Se
           aria-label="Selection actions"
           className="absolute right-0 z-30 mt-1 w-44 rounded-lg bg-surface py-1 shadow-dialog"
         >
-          {['Move to pipeline', 'Add to pipeline', 'Delete'].map((label) => (
+          {[
+            ...(onTransfer
+              ? [
+                  { label: 'Move to pipeline', onSelect: () => onTransfer('move') },
+                  { label: 'Add to pipeline', onSelect: () => onTransfer('copy') },
+                ]
+              : []),
+            { label: 'Delete', onSelect: onDelete },
+          ].map(({ label, onSelect }) => (
             <li key={label} role="none">
               <button
                 type="button"
                 role="menuitem"
+                onClick={
+                  onSelect &&
+                  (() => {
+                    setOpen(false)
+                    onSelect()
+                  })
+                }
                 className="flex w-full items-center px-3 py-2 text-left text-body text-ink-2 hover:bg-surface-hover hover:text-ink"
               >
                 {label}

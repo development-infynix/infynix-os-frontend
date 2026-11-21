@@ -61,7 +61,7 @@ export interface KanbanBoardProps {
   /** Turns dragging off, e.g. in select mode. */
   dragDisabled?: boolean
   onView?: (deal: CrmDeal) => void
-  onOptions?: (deal: CrmDeal) => void
+  onOptions?: (deal: CrmDeal, anchor: HTMLElement) => void
   onScrollStateChange?: (state: BoardScrollState) => void
   /** Loads a stage's next page as the reader nears the bottom of its column. */
   onLoadMore?: (stageId: string) => void

@@ -323,6 +323,15 @@ export async function runInChunks(
   }
 }
 
+/* ── Board selection ───────────────────────────────────────────────────── */
+
+/** Deletes one deal (a card's options › Delete). */
+export const deleteCrmDeal = (id: string) => api<void>(`/crm/deals/${id}`, { method: 'DELETE' })
+
+/** One chunk of the board's Select › Delete (up to TRANSFER_CHUNK deals). */
+export const deleteCrmDeals = (dealIds: string[]) =>
+  api<{ deleted: number; missing: number }>('/crm/deals/delete', { method: 'POST', body: JSON.stringify({ dealIds }) })
+
 /* ── Deal transfer (docs/deal-transfer.md) ─────────────────────────────── */
 
 /** Deals per transfer request (the endpoint's maximum). */

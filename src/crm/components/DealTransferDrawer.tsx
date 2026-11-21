@@ -45,6 +45,8 @@ export function DealTransferDrawer({
   pipeline,
   pipelines,
   totals,
+  dealIds,
+  onDone,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -56,7 +58,15 @@ export function DealTransferDrawer({
   pipelines: CrmPipeline[]
   /** Each stage's true deal count (from the board), not just the loaded cards. */
   totals: Record<string, number>
+  /**
+   * The board's Select › Move / Add: these exact deals. The drawer opens at
+   * the Destination step, with no Select or Stages steps.
+   */
+  dealIds?: string[]
+  /** After a run that finished (the board leaves select mode). */
+  onDone?: () => void
 }) {
+  const fromSelection = dealIds !== undefined
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const queryClient = useQueryClient()
@@ -76,7 +86,7 @@ export function DealTransferDrawer({
   if (open !== wasOpen) {
     setWasOpen(open)
     if (open) {
-      setStep(1)
+      setStep(dealIds !== undefined ? 3 : 1)
       setStageIds(new Set())
       setTargetId(null)
       setTargetStageId(null)
@@ -101,7 +111,9 @@ export function DealTransferDrawer({
   const destinations = pipelines.filter((p) => p.id !== pipeline.id)
   const target = destinations.find((p) => p.id === targetId) ?? null
   const landing = target?.stages.find((s) => s.id === targetStageId) ?? target?.stages[0] ?? null
-  const selectedCount = [...stageIds].reduce((sum, id) => sum + (totals[id] ?? 0), 0)
+  const selectedCount = fromSelection
+    ? dealIds.length
+    : [...stageIds].reduce((sum, id) => sum + (totals[id] ?? 0), 0)
   const where = target ? `${target.name}${landing ? ` › ${landing.name}` : ''}` : ''
   // What will happen to owners in the target, so nobody moves deals blind.
   const targetRules = useQuery({ ...crmAssignmentQuery(targetId ?? ''), enabled: open && Boolean(targetId) })
@@ -152,6 +164,7 @@ export function DealTransferDrawer({
       }
     }
     setPhase('done')
+    onDone?.()
     await queryClient.invalidateQueries({ queryKey: CRM_KEY })
   }
 
@@ -160,8 +173,8 @@ export function DealTransferDrawer({
     setError(null)
     setResult(NO_TOTALS)
     try {
-      // Every deal in the chosen stages, not only the cards loaded on the board.
-      const { ids } = await fetchCrmDealIds(pipeline.id, [...stageIds])
+      // The selected cards, or every deal in the chosen stages (not only the loaded cards).
+      const ids = fromSelection ? dealIds : (await fetchCrmDealIds(pipeline.id, [...stageIds])).ids
       setProgress({ done: 0, total: ids.length })
       setBatch({ ids, next: 0 })
       await run(ids, 0, NO_TOTALS)
@@ -220,7 +233,7 @@ export function DealTransferDrawer({
           </button>
         </div>
 
-        {phase === 'choose' && <StepsStrip step={step} />}
+        {phase === 'choose' && !fromSelection && <StepsStrip step={step} />}
 
         <div className="flex flex-1 flex-col overflow-y-auto bg-canvas px-4 py-4">
           {phase === 'done' ? (
@@ -402,8 +415,11 @@ export function DealTransferDrawer({
               </Button>
             ) : (
               <>
-                <Button variant="secondary" onClick={() => (step === 1 ? close() : setStep((step - 1) as Step))}>
-                  {step === 1 ? 'Cancel' : 'Back'}
+                <Button
+                  variant="secondary"
+                  onClick={() => (step === 1 || fromSelection ? close() : setStep((step - 1) as Step))}
+                >
+                  {step === 1 || fromSelection ? 'Cancel' : 'Back'}
                 </Button>
                 {step < 3 ? (
                   <Button variant="primary" disabled={!canNext} onClick={() => setStep((step + 1) as Step)}>
