@@ -275,16 +275,6 @@ export const unassignCrmDeals = (pipelineId: string, scope: { userId?: string; s
     body: JSON.stringify(scope),
   })
 
-/** One chunk: move a person's deals (optionally one source) to someone else. Sources and the rule stay. */
-export const transferCrmDeals = (
-  pipelineId: string,
-  move: { fromUserId: string; toUserId: string; source?: AssignmentRule },
-) =>
-  api<{ transferred: number; remaining: number }>(`/crm/pipelines/${pipelineId}/assignments/transfer`, {
-    method: 'POST',
-    body: JSON.stringify(move),
-  })
-
 /** Everyone who could be on the access list, and who is. */
 export interface AccessCandidate {
   userId: string
