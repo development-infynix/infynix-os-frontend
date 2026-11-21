@@ -323,6 +323,36 @@ export async function runInChunks(
   }
 }
 
+/* ── Deal transfer (docs/deal-transfer.md) ─────────────────────────────── */
+
+/** Deals per transfer request (the endpoint's maximum). */
+export const TRANSFER_CHUNK = 500
+
+/** Every deal in the chosen stages of a pipeline, in board order (not only the loaded cards). */
+export const fetchCrmDealIds = (pipelineId: string, stageIds: string[]) =>
+  api<{ ids: string[] }>(`/crm/pipelines/${pipelineId}/deal-ids?stageIds=${stageIds.join(',')}`)
+
+export interface TransferChunkResult {
+  mode: 'move' | 'copy'
+  moved: number
+  /** New deals created by Add to another pipeline. */
+  added: number
+  /** Moved deals that arrived without an owner. */
+  unassigned: number
+  /** Requested deals that no longer existed. */
+  missing: number
+  /** Left behind: their client already has a deal in the target. */
+  skipped: { dealId: string; clientName: string }[]
+}
+
+/** One chunk (up to TRANSFER_CHUNK deals from one pipeline): Move, or Add to another pipeline (`copy`). */
+export const transferCrmDeals = (input: {
+  mode: 'move' | 'copy'
+  dealIds: string[]
+  targetPipelineId: string
+  targetStageId?: string
+}) => api<TransferChunkResult>('/crm/deals/transfer', { method: 'POST', body: JSON.stringify(input) })
+
 /** Most clients one bulk-add request takes; the Clients page sends larger selections in chunks. */
 export const CRM_BULK_CHUNK = 500
 

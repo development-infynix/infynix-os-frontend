@@ -30,6 +30,7 @@ import {
 import { AddDealDialog } from '../components/AddDealDialog'
 import { AddFromImportsDrawer } from '../components/AddFromImportsDrawer'
 import { AssignDealsDrawer } from '../components/assign/AssignDealsDrawer'
+import { DealTransferDrawer, type TransferAction } from '../components/DealTransferDrawer'
 import { CrmActions } from '../components/CrmActions'
 import { DealDetailsDrawer } from '../components/DealDetailsDrawer'
 import { AddPipelineDrawer } from '../components/AddPipelineDrawer'
@@ -85,6 +86,9 @@ export function CrmPage() {
   const [adding, setAdding] = useState(false)
   const [addingFromImports, setAddingFromImports] = useState(false)
   const [assigningDeals, setAssigningDeals] = useState(false)
+  const [transferringDeals, setTransferringDeals] = useState(false)
+  /** Add or Move, from the Deal transfer card's menu; kept while the drawer slides shut. */
+  const [transferAction, setTransferAction] = useState<TransferAction>('move')
   const [importingData, setImportingData] = useState(false)
   const [creatingPipeline, setCreatingPipeline] = useState(false)
   const [managingPipelines, setManagingPipelines] = useState(false)
@@ -545,6 +549,14 @@ export function CrmPage() {
               onCreatePipeline={() => setCreatingPipeline(true)}
               onManageStages={canManage && pipeline ? () => setManagingStages(true) : undefined}
               onAssignDeals={pipeline ? () => setAssigningDeals(true) : undefined}
+              onTransferDeals={
+                canManage && pipeline
+                  ? (action) => {
+                      setTransferAction(action)
+                      setTransferringDeals(true)
+                    }
+                  : undefined
+              }
               hasPipelines={pipelines.length > 0}
             />
           </div>
@@ -581,6 +593,16 @@ export function CrmPage() {
           onOpenChange={setManagingStages}
           pipelineId={activePipelineId}
         />
+        {pipeline && canManage && (
+          <DealTransferDrawer
+            open={transferringDeals}
+            onOpenChange={setTransferringDeals}
+            action={transferAction}
+            pipeline={{ ...pipeline, stages }}
+            pipelines={pipelines}
+            totals={boardQuery.data?.totals ?? {}}
+          />
+        )}
         {pipeline && (
           <AssignDealsDrawer
             open={assigningDeals}

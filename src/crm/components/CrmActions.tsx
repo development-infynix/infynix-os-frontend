@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import {
   ArrowLeftRight,
+  CopyPlus,
   CreditCard,
   Layers,
   ListChecks,
@@ -84,16 +85,20 @@ interface CrmActionsProps {
   onManageStages?: () => void
   /** Opens the Assign deals drawer (read-only for staff); absent without a pipeline. */
   onAssignDeals?: () => void
+  /** Opens the Deal transfer drawer set to Add or Move (Owner and managers); absent otherwise. */
+  onTransferDeals?: (action: 'copy' | 'move') => void
   /** False when there are no pipelines yet: Manage has nothing to manage. */
   hasPipelines?: boolean
 }
 
-/** The Manage pipeline card's menu actions. */
-interface PipelineMenuActions {
-  onManage: () => void
-  onCreate: () => void
-  /** Manage is disabled until a pipeline exists. */
-  canManageExisting: boolean
+/** One item in a card's menu. */
+interface CardMenuItem {
+  label: string
+  icon: LucideIcon
+  onSelect: () => void
+  disabled?: boolean
+  /** Why it's disabled. */
+  title?: string
 }
 
 /** The Actions tab: one card per pipeline setting. */
@@ -104,12 +109,28 @@ export function CrmActions({
   onCreatePipeline,
   onManageStages,
   onAssignDeals,
+  onTransferDeals,
   hasPipelines = false,
 }: CrmActionsProps) {
-  const pipelineMenu =
+  const pipelineMenu: CardMenuItem[] | undefined =
     canManage && onManagePipelines && onCreatePipeline
-      ? { onManage: onManagePipelines, onCreate: onCreatePipeline, canManageExisting: hasPipelines }
+      ? [
+          {
+            label: 'Manage',
+            icon: SlidersHorizontal,
+            onSelect: onManagePipelines,
+            disabled: !hasPipelines,
+            title: hasPipelines ? undefined : 'No pipelines to manage yet',
+          },
+          { label: 'Create', icon: Plus, onSelect: onCreatePipeline },
+        ]
       : undefined
+  const transferMenu: CardMenuItem[] | undefined = onTransferDeals
+    ? [
+        { label: 'Add to pipeline', icon: CopyPlus, onSelect: () => onTransferDeals('copy') },
+        { label: 'Move to pipeline', icon: ArrowLeftRight, onSelect: () => onTransferDeals('move') },
+      ]
+    : undefined
   return (
     <ul className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3" aria-label="Pipeline actions">
       {ACTIONS.map((action) => (
@@ -117,13 +138,11 @@ export function CrmActions({
           <ActionCard
             action={action}
             pipelineName={pipelineName}
-            pipelineMenu={action.key === 'manage-pipeline' ? pipelineMenu : undefined}
+            menu={
+              action.key === 'manage-pipeline' ? pipelineMenu : action.key === 'deal-transfer' ? transferMenu : undefined
+            }
             onClick={
-              action.key === 'manage-stages'
-                ? onManageStages
-                : action.key === 'assign-deals'
-                  ? onAssignDeals
-                  : undefined
+              action.key === 'manage-stages' ? onManageStages : action.key === 'assign-deals' ? onAssignDeals : undefined
             }
           />
         </li>
@@ -135,16 +154,17 @@ export function CrmActions({
 function ActionCard({
   action,
   pipelineName,
-  pipelineMenu,
+  menu,
   onClick,
 }: {
   action: CrmAction
   pipelineName: string
-  pipelineMenu?: PipelineMenuActions
+  /** Turns the whole card into a menu button (Manage pipeline, Deal transfer). */
+  menu?: CardMenuItem[]
   onClick?: () => void
 }) {
-  if (pipelineMenu) {
-    return <PipelineMenuCard action={action} pipelineName={pipelineName} menu={pipelineMenu} />
+  if (menu) {
+    return <MenuCard action={action} pipelineName={pipelineName} items={menu} />
   }
   if (onClick) {
     return (
@@ -200,31 +220,29 @@ function ActionCardBody({
 }
 
 /**
- * The Manage pipeline card for owners and managers: the whole card is the
- * menu button (the kebab is only a hint), and the menu opens from its corner.
- * Manage is still to come; Create opens the add-pipeline drawer.
+ * A card whose whole surface is a menu button (the kebab is only a hint); the
+ * menu opens from its corner. Manage pipeline: Manage / Create. Deal transfer:
+ * Add to pipeline / Move to pipeline.
  */
-function PipelineMenuCard({
+function MenuCard({
   action,
   pipelineName,
-  menu,
+  items,
 }: {
   action: CrmAction
   pipelineName: string
-  menu: PipelineMenuActions
+  items: CardMenuItem[]
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const manageRef = useRef<HTMLButtonElement>(null)
-  const createRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const menuId = useId()
-  const canManageExisting = menu.canManageExisting
 
   useEffect(() => {
     if (!open) return
     // Focus the first item you can use, as a menu should.
-    ;(canManageExisting ? manageRef : createRef).current?.focus()
+    menuRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
     const onPointerDown = (event: MouseEvent) => {
       if (!ref.current?.contains(event.target as Node)) setOpen(false)
     }
@@ -239,7 +257,7 @@ function PipelineMenuCard({
       document.removeEventListener('mousedown', onPointerDown)
       document.removeEventListener('keydown', onKey)
     }
-  }, [open, canManageExisting])
+  }, [open])
 
   return (
     <div ref={ref} className="relative flex w-full">
@@ -264,43 +282,32 @@ function PipelineMenuCard({
       </button>
       {open && (
         <div
+          ref={menuRef}
           id={menuId}
           role="menu"
-          aria-label="Pipeline options"
-          className="absolute top-12 right-3 z-30 w-48 rounded-lg bg-surface py-1 shadow-dialog"
+          aria-label={`${action.title} options`}
+          className="absolute top-12 right-3 z-30 w-52 rounded-lg bg-surface py-1 shadow-dialog"
         >
-          <button
-            ref={manageRef}
-            type="button"
-            role="menuitem"
-            disabled={!menu.canManageExisting}
-            title={menu.canManageExisting ? undefined : 'No pipelines to manage yet'}
-            onClick={() => {
-              // Focus the card first: this item is about to unmount, and the drawer
-              // returns focus to whatever had it when it opened.
-              triggerRef.current?.focus()
-              setOpen(false)
-              menu.onManage()
-            }}
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-label text-ink hover:bg-surface-hover disabled:cursor-not-allowed disabled:text-ink-3 disabled:opacity-60 disabled:hover:bg-transparent"
-          >
-            <SlidersHorizontal size={15} strokeWidth={2} aria-hidden />
-            Manage
-          </button>
-          <button
-            ref={createRef}
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              triggerRef.current?.focus()
-              setOpen(false)
-              menu.onCreate()
-            }}
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-label text-ink hover:bg-surface-hover"
-          >
-            <Plus size={15} strokeWidth={2} aria-hidden />
-            Create
-          </button>
+          {items.map(({ label, icon: Icon, onSelect, disabled, title }) => (
+            <button
+              key={label}
+              type="button"
+              role="menuitem"
+              disabled={disabled}
+              title={title}
+              onClick={() => {
+                // Focus the card first: this item is about to unmount, and the drawer
+                // returns focus to whatever had it when it opened.
+                triggerRef.current?.focus()
+                setOpen(false)
+                onSelect()
+              }}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-label text-ink hover:bg-surface-hover disabled:cursor-not-allowed disabled:text-ink-3 disabled:opacity-60 disabled:hover:bg-transparent"
+            >
+              <Icon size={15} strokeWidth={2} aria-hidden />
+              {label}
+            </button>
+          ))}
         </div>
       )}
     </div>
