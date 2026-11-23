@@ -71,6 +71,8 @@ export function ReportsPage() {
     drawer?.kind === 'view' ? { kind: 'view', report: viewingQuery.data ?? drawer.report } : drawer
   const [settingsOpen, setSettingsOpen] = useState(false)
 
+  /** No report is filed on an off day (the company's today). */
+  const offToday = !!settings?.todayIsOffDay
   const newReport = () => setDrawer({ kind: 'new' })
 
   return (
@@ -80,18 +82,28 @@ export function ReportsPage() {
       <div className="sticky top-header z-20 flex h-header shrink-0 items-center justify-end gap-2 border-b border-line bg-canvas/90 px-5 backdrop-blur-sm sm:top-0 sm:h-14 sm:px-10">
         {seesAll && <PersonFilter value={userId} onChange={(id) => setSearch({ userId: id })} />}
         <DateFilter value={date} max={settings?.today} onChange={(d) => setSearch({ date: d })} />
-        <Button
-          variant="primary"
-          onClick={newReport}
-          disabled={!settings}
-          aria-haspopup="dialog"
-          aria-label="New report"
-          title="New report"
-          className="order-first mr-auto shrink-0 whitespace-nowrap sm:order-none sm:mr-0"
+        {/* The wrapper carries the tooltip: a disabled button shows none of its own. */}
+        <span
+          title={offToday ? 'Today is an off day, so no report can be filed.' : undefined}
+          className="order-first mr-auto shrink-0 sm:order-none sm:mr-0"
         >
-          <FilePlus2 size={16} strokeWidth={2} className="shrink-0" aria-hidden />
-          New report
-        </Button>
+          <Button
+            variant="primary"
+            onClick={newReport}
+            disabled={!settings || offToday}
+            aria-haspopup="dialog"
+            aria-describedby={offToday ? 'new-report-off-day' : undefined}
+            className="whitespace-nowrap"
+          >
+            <FilePlus2 size={16} strokeWidth={2} className="shrink-0" aria-hidden />
+            New report
+          </Button>
+          {offToday && (
+            <span id="new-report-off-day" className="sr-only">
+              Today is an off day, so no report can be filed.
+            </span>
+          )}
+        </span>
         {isOwner && settings && (
           <Button
             variant="secondary"
@@ -143,7 +155,7 @@ export function ReportsPage() {
                   ? 'Daily reports from your team will appear here as they’re filed.'
                   : 'File a report at the end of each day: what you worked on, one work at a time.'
               }
-              onNew={settings ? newReport : undefined}
+              onNew={settings && !offToday ? newReport : undefined}
               newLabel="New report"
             />
           )
@@ -225,20 +237,23 @@ function ReportCard({ report, seesAll, onView }: { report: Report; seesAll: bool
 
       <div className="mt-4 w-full">
         <p className="text-body font-semibold text-ink">Submitted</p>
-        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-label font-normal text-ink-3 tabular-nums">
-          <span>{formatStamp(report.submittedAt)}</span>
+        {/* The submitted time, with Late on the same line at the right. */}
+        <div className="mt-0.5 flex items-center gap-3 text-label">
+          <p className="flex min-w-0 flex-wrap items-center gap-x-2 font-normal text-ink-3 tabular-nums">
+            <span>{formatStamp(report.submittedAt)}</span>
+            {report.editedAt && (
+              <span className="italic" title={`Edited ${formatStamp(report.editedAt)}`}>
+                Edited
+              </span>
+            )}
+          </p>
           {report.late && (
-            <span className="inline-flex items-center gap-1 font-medium text-danger/75">
+            <span className="ml-auto inline-flex shrink-0 items-center gap-1 font-medium text-danger/75">
               <Clock3 size={12} strokeWidth={2.2} aria-hidden />
               Late
             </span>
           )}
-          {report.editedAt && (
-            <span className="italic" title={`Edited ${formatStamp(report.editedAt)}`}>
-              Edited
-            </span>
-          )}
-        </p>
+        </div>
       </div>
 
       {report.remarks && (
