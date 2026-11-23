@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Clock3, ExternalLink, Pencil, Trash2, X } from 'lucide-react'
+import { Clock3, Download, ExternalLink, Pencil, Trash2, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { AlertDialog } from '@/components/Alert'
 import { Button } from '@/components/Button'
@@ -14,7 +14,7 @@ import {
   type Report,
   type ReportSettings,
 } from '../api'
-import { editableUntil, formatClock, formatDay, formatDayLong, formatStamp } from '../lib/format'
+import { editableUntil, formatBytes, formatClock, formatDay, formatDayLong, formatStamp } from '../lib/format'
 import { ReportForm } from './ReportForm'
 
 /** What the drawer shows: a new report's form, or one report (view, then edit). */
@@ -166,8 +166,22 @@ export function ReportDrawer({ state, settings, me, onClose, onCreated }: Report
                       <span className="tabular-nums">{formatStamp(report.submittedAt)}</span>
                       <SubmittedMarks report={report} />
                     </Detail>
-                    <Detail label="Link">
-                      {report.attachment ? (
+                    <Detail label="Files">
+                      {report.attachment?.type === 'file' ? (
+                        // A short-lived signed link: it downloads under the file's own name.
+                        <a
+                          href={report.attachment.url}
+                          className="inline-flex max-w-full items-start gap-1.5 font-medium text-secondary-text underline-offset-2 hover:underline"
+                        >
+                          <Download size={14} strokeWidth={2} aria-hidden className="mt-0.5 shrink-0" />
+                          <span className="min-w-0 break-all">
+                            {report.attachment.name}
+                            <span className="ml-1.5 font-normal text-ink-3 tabular-nums">
+                              {formatBytes(report.attachment.size)}
+                            </span>
+                          </span>
+                        </a>
+                      ) : report.attachment ? (
                         <a
                           href={report.attachment.url}
                           target="_blank"

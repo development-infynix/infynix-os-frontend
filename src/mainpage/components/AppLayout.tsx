@@ -67,7 +67,10 @@ export function AppLayout() {
       {/* Tablet and up the shell is exactly one screen tall: the window never scrolls; content scrolls inside <main>. */}
       <div className="flex min-h-dvh min-w-0 flex-col bg-canvas sm:h-dvh">
         <Header title={TITLES[pathname] ?? 'Infynix OS'} onOpenMenu={() => setMenuOpen(true)} />
-        <main className="flex min-h-0 flex-1 flex-col sm:overflow-y-auto">
+        {/* `relative`: absolutely positioned bits deep in a page (screen-reader-only
+            labels, e.g. in Pagination) are measured against this scroller, not the
+            window, so a long page never makes the window scroll too. */}
+        <main className="relative flex min-h-0 flex-1 flex-col sm:overflow-y-auto">
           <Outlet />
         </main>
       </div>

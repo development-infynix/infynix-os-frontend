@@ -1,10 +1,24 @@
 import { Link2, Plus, X } from 'lucide-react'
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Button } from '@/components/Button'
 import { FormError, FormField } from '@/components/FormField'
 import { ApiError } from '@/lib/api'
-import type { Report, ReportInput, ReportSettings } from '../api'
-import { WEEKDAYS, weekdayOf } from '../lib/format'
+import {
+  MAX_REPORT_FILE_BYTES,
+  uploadReportFile,
+  type Report,
+  type ReportInput,
+  type ReportSettings,
+  type UploadedReportFile,
+} from '../api'
+import { WEEKDAYS, formatBytes, weekdayOf } from '../lib/format'
+import { ReportFileSlot } from './ReportFileSlot'
+
+/** The file in the Upload tab: the report's current one, or one just uploaded. */
+type AttachedFile =
+  | { kind: 'current'; name: string; size: number }
+  | { kind: 'uploading'; name: string; size: number }
+  | ({ kind: 'uploaded' } & UploadedReportFile)
 
 const MAX_POINTS = 100
 
@@ -30,8 +44,73 @@ export function ReportForm({ report, settings, initialDate, onCancel, onSubmit }
   const defaultDate = initialDate ?? (settings.submittedToday || settings.todayIsOffDay ? '' : settings.today)
   const [date, setDate] = useState(report?.reportDate ?? defaultDate)
   const [points, setPoints] = useState<string[]>(report?.reports.length ? report.reports : [''])
-  const [mode, setMode] = useState<'none' | 'url'>(report?.attachment ? 'url' : 'none')
-  const [link, setLink] = useState(report?.attachment?.url ?? '')
+  const current = report?.attachment
+  // The open tab is what gets attached: a report carries a link or a file, never both.
+  const [filesTab, setFilesTab] = useState<'link' | 'upload'>(current?.type === 'file' ? 'upload' : 'link')
+  const [link, setLink] = useState(current?.type === 'url' ? current.url : '')
+  const [file, setFile] = useState<AttachedFile | null>(
+    current?.type === 'file' ? { kind: 'current', name: current.name, size: current.size } : null,
+  )
+  const [progress, setProgress] = useState<number | null>(null)
+  const [fileError, setFileError] = useState<string | null>(null)
+  const uploadAbort = useRef<AbortController | null>(null)
+
+  // Leaving the form mid-upload cancels it.
+  useEffect(() => () => uploadAbort.current?.abort(), [])
+
+  /** Uploads as soon as a file is picked, so Submit only has to attach it. */
+  async function pickFile(picked: File) {
+    setFileError(null)
+    if (picked.size > MAX_REPORT_FILE_BYTES) {
+      setFileError(`That file is ${formatBytes(picked.size)}. Files can be up to ${formatBytes(MAX_REPORT_FILE_BYTES)}.`)
+      return
+    }
+    uploadAbort.current?.abort()
+    const controller = new AbortController()
+    uploadAbort.current = controller
+    setFile({ kind: 'uploading', name: picked.name, size: picked.size })
+    setProgress(0)
+    try {
+      const uploaded = await uploadReportFile(picked, { onProgress: setProgress, signal: controller.signal })
+      if (controller.signal.aborted) return
+      setFile({ kind: 'uploaded', ...uploaded })
+    } catch (cause) {
+      if (controller.signal.aborted) return
+      setFile(null)
+      setFileError(
+        cause instanceof ApiError && cause.status === 413
+          ? `Files can be up to ${formatBytes(MAX_REPORT_FILE_BYTES)}.`
+          : cause instanceof ApiError && cause.status === 415
+            ? 'That type of file can’t be attached. Use a PDF, image, Office file, CSV or text file.'
+            : cause instanceof ApiError && cause.status !== 500
+              ? cause.message
+              : 'Couldn’t upload the file. Try again.',
+      )
+    } finally {
+      if (uploadAbort.current === controller) {
+        uploadAbort.current = null
+        setProgress(null)
+      }
+    }
+  }
+
+  function removeFile() {
+    uploadAbort.current?.abort()
+    uploadAbort.current = null
+    setProgress(null)
+    setFile(null)
+    setFileError(null)
+  }
+
+  /** What the open tab attaches. */
+  function attachment(): Pick<ReportInput, 'attachmentMode' | 'attachmentUrl' | 'fileKey' | 'fileName'> {
+    if (filesTab === 'link') {
+      return link.trim() ? { attachmentMode: 'url', attachmentUrl: link.trim() } : { attachmentMode: 'none' }
+    }
+    if (file?.kind === 'current') return { attachmentMode: 'keep' }
+    if (file?.kind === 'uploaded') return { attachmentMode: 'file', fileKey: file.key, fileName: file.name }
+    return { attachmentMode: 'none' }
+  }
   const [errors, setErrors] = useState<FieldErrors>({})
   const [serverError, setServerError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -71,10 +150,9 @@ export function ReportForm({ report, settings, initialDate, onCancel, onSubmit }
       next.date = `${day} is an off day`
     }
     if (!points.some((point) => point.trim())) next.points = 'Add at least one work'
-    if (mode === 'url') {
-      const value = link.trim()
-      if (!value) next.link = 'Paste the link, or choose None'
-      else if (!/^https?:\/\/\S+$/i.test(value)) next.link = 'Enter a full link, like https://example.com'
+    const value = link.trim()
+    if (filesTab === 'link' && value && !/^https?:\/\/\S+$/i.test(value)) {
+      next.link = 'Enter a full link, like https://example.com'
     }
     return next
   }
@@ -83,14 +161,17 @@ export function ReportForm({ report, settings, initialDate, onCancel, onSubmit }
     const next = validate()
     setErrors(next)
     if (Object.keys(next).length) return
+    if (filesTab === 'upload' && file?.kind === 'uploading') {
+      setFileError('Wait for the upload to finish, or remove the file.')
+      return
+    }
     setSaving(true)
     setServerError(null)
     try {
       await onSubmit({
         reportDate: date,
         reports: points.map((point) => point.trim()).filter(Boolean),
-        attachmentMode: mode,
-        attachmentUrl: mode === 'url' ? link.trim() : undefined,
+        ...attachment(),
       })
     } catch (cause) {
       setServerError(cause instanceof ApiError && cause.status !== 500 ? cause.message : 'Couldn’t save. Try again.')
@@ -155,13 +236,26 @@ export function ReportForm({ report, settings, initialDate, onCancel, onSubmit }
                   placeholder={index === 0 ? 'What did you work on?' : undefined}
                   className="field-input h-auto min-h-10 resize-y py-2 leading-6 [field-sizing:content]"
                 />
-                {points.length > 1 && (
+                {/* The last row ends in the add button; earlier rows end in remove. */}
+                {index === points.length - 1 ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => addPoint(index)}
+                    disabled={points.length >= MAX_POINTS}
+                    aria-label="Add work"
+                    title="Add work (or press Enter)"
+                    className="mt-1 w-8 shrink-0 px-0!"
+                  >
+                    <Plus size={16} strokeWidth={2.2} aria-hidden />
+                  </Button>
+                ) : (
                   <button
                     type="button"
                     onClick={() => removePoint(index)}
                     aria-label={`Remove work ${index + 1}`}
                     title="Remove work"
-                    className="mt-1 grid size-8 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-surface-hover hover:text-ink"
+                    className="mt-1 grid size-8 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-surface-hover hover:text-danger"
                   >
                     <X size={16} strokeWidth={2} aria-hidden />
                   </button>
@@ -169,43 +263,46 @@ export function ReportForm({ report, settings, initialDate, onCancel, onSubmit }
               </li>
             ))}
           </ol>
-          <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 pl-10">
-            <Button size="sm" variant="secondary" onClick={() => addPoint()} disabled={points.length >= MAX_POINTS}>
-              <Plus size={15} strokeWidth={2} aria-hidden />
-              Add work
-            </Button>
-            <span className="text-caption text-ink-3">Enter adds the next work · Shift+Enter for a new line</span>
-          </div>
         </FormField>
 
-        <FormField label="Link (optional)">
-          <div className="flex w-fit gap-1 rounded-xl bg-canvas p-1.5 shadow-well">
+      </div>
+
+      {/* Sub-footer: files, pinned above the actions while the works scroll. */}
+      <section aria-labelledby="report-files-label" className="shrink-0 border-t border-line bg-surface px-5 pt-3 pb-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 id="report-files-label" className="text-label font-medium text-ink-2">
+            Files <span className="font-normal text-ink-3">(optional)</span>
+          </h3>
+          <div role="radiogroup" aria-labelledby="report-files-label" className="flex gap-1 rounded-xl bg-canvas p-1 shadow-well">
             {(
               [
-                ['none', 'None'],
-                ['url', 'Link'],
+                ['link', 'Link'],
+                ['upload', 'Upload'],
               ] as const
             ).map(([value, label]) => (
               <label
                 key={value}
-                className={`inline-flex h-8 min-w-[6.5rem] cursor-pointer items-center justify-center rounded-lg px-5 text-label transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--focus)] ${
-                  mode === value ? 'btn btn-primary' : 'font-medium text-ink-2 hover:bg-surface-hover hover:text-ink'
+                className={`inline-flex h-7 min-w-[5.5rem] cursor-pointer items-center justify-center rounded-lg px-3 text-label transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--focus)] ${
+                  filesTab === value ? 'btn btn-primary' : 'font-medium text-ink-2 hover:bg-surface-hover hover:text-ink'
                 }`}
               >
                 <input
                   type="radio"
-                  name="report-attachment"
+                  name="report-files"
                   value={value}
-                  checked={mode === value}
-                  onChange={() => setMode(value)}
+                  checked={filesTab === value}
+                  onChange={() => setFilesTab(value)}
                   className="sr-only"
                 />
                 {label}
               </label>
             ))}
           </div>
-          {mode === 'url' && (
-            <div className="relative mt-3">
+        </div>
+
+        {filesTab === 'link' ? (
+          <div className="mt-3">
+            <div className="relative">
               <Link2
                 size={16}
                 strokeWidth={1.9}
@@ -218,22 +315,36 @@ export function ReportForm({ report, settings, initialDate, onCancel, onSubmit }
                 autoComplete="off"
                 value={link}
                 onChange={(event) => setLink(event.target.value)}
-                placeholder="https://"
+                placeholder="Paste a link: Drive, Figma, a doc…"
                 aria-label="Link"
                 aria-invalid={!!errors.link}
+                aria-describedby={errors.link ? 'report-link-error' : undefined}
                 className="field-input pl-9"
               />
-              {errors.link && <p className="mt-1.5 text-caption text-danger">{errors.link}</p>}
             </div>
-          )}
-        </FormField>
-      </div>
+            {errors.link && (
+              <p id="report-link-error" className="mt-1.5 text-caption text-danger">
+                {errors.link}
+              </p>
+            )}
+          </div>
+        ) : (
+          <ReportFileSlot
+            file={file}
+            progress={progress}
+            error={fileError}
+            disabled={saving}
+            onPick={(picked) => void pickFile(picked)}
+            onRemove={removeFile}
+          />
+        )}
+      </section>
 
       <div className="flex items-center gap-2 border-t border-line bg-canvas/60 px-5 py-3.5 [&>*]:flex-1 sm:justify-end sm:[&>*]:flex-none">
         <Button variant="secondary" onClick={onCancel} disabled={saving}>
           Cancel
         </Button>
-        <Button type="submit" variant="primary" loading={saving}>
+        <Button type="submit" variant="primary" loading={saving} disabled={progress !== null}>
           {saving ? 'Saving…' : report ? 'Save changes' : 'Submit report'}
         </Button>
       </div>

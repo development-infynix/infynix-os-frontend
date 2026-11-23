@@ -58,3 +58,11 @@ export const weekdayOf = (value: string) => parseDay(value).getDay()
 /** Until when the author may still edit or delete a report (the server has the final say). */
 export const editableUntil = (submittedAt: string, windowMinutes: number) =>
   new Date(new Date(submittedAt).getTime() + windowMinutes * 60_000)
+
+const sizeFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 })
+/** "840 KB", "2.4 MB" */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${sizeFormat.format(bytes / 1024)} KB`
+  return `${sizeFormat.format(bytes / (1024 * 1024))} MB`
+}

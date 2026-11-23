@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
-import { Clock3, FilePlus2, Link2, MessageSquareText, SlidersHorizontal } from 'lucide-react'
+import { Clock3, FilePlus2, MessageSquareText, SlidersHorizontal } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Loader } from '@/components/Loader'
@@ -74,9 +74,10 @@ export function ReportsPage() {
   const newReport = () => setDrawer({ kind: 'new' })
 
   return (
-    <div className="flex w-full flex-col px-5 pb-32 sm:min-h-0 sm:flex-1 sm:px-10 sm:py-10">
+    <div className="flex w-full flex-1 flex-col">
       <h1 className="sr-only">Reports</h1>
-      <div className="sticky top-header z-20 -mx-5 flex h-header items-center justify-end gap-2 border-b border-line bg-canvas/90 px-5 backdrop-blur-sm sm:static sm:mx-0 sm:h-auto sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+      {/* Subheader: pinned under the app header while the cards scroll. */}
+      <div className="sticky top-header z-20 flex h-header shrink-0 items-center justify-end gap-2 border-b border-line bg-canvas/90 px-5 backdrop-blur-sm sm:top-0 sm:h-14 sm:px-10">
         {seesAll && <PersonFilter value={userId} onChange={(id) => setSearch({ userId: id })} />}
         <DateFilter value={date} max={settings?.today} onChange={(d) => setSearch({ date: d })} />
         <Button
@@ -86,10 +87,10 @@ export function ReportsPage() {
           aria-haspopup="dialog"
           aria-label="New report"
           title="New report"
-          className="w-9 px-0! sm:w-auto sm:px-3.5!"
+          className="order-first mr-auto shrink-0 whitespace-nowrap sm:order-none sm:mr-0"
         >
           <FilePlus2 size={16} strokeWidth={2} className="shrink-0" aria-hidden />
-          <span className="hidden sm:inline">New report</span>
+          New report
         </Button>
         {isOwner && settings && (
           <Button
@@ -105,7 +106,11 @@ export function ReportsPage() {
         )}
       </div>
 
-      <div className="mt-5 flex min-h-[60vh] flex-col sm:flex-1">
+      <div
+        className={`flex min-h-[60vh] flex-1 flex-col px-5 pt-5 sm:px-10 sm:pt-6 ${
+          data && data.total > 0 ? 'pb-28 sm:pb-6' : 'pb-10'
+        }`}
+      >
         {isPending || busy ? (
           <div className="grid flex-1 place-items-center">
             <Loader label="Loading reports" />
@@ -143,30 +148,34 @@ export function ReportsPage() {
             />
           )
         ) : (
-          <>
-            <ul aria-busy={busy} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {data.items.map((report) => (
-                <li key={report.id} className="min-w-0">
-                  <ReportCard report={report} seesAll={seesAll} onView={() => setDrawer({ kind: 'view', report })} />
-                </li>
-              ))}
-            </ul>
-
-            {data.totalPages > 1 && (
-              <Pagination
-                page={data.page}
-                totalPages={data.totalPages}
-                total={data.total}
-                pageSize={data.pageSize}
-                onPageChange={(next) => setSearch({ page: next })}
-                busy={busy}
-                noun={data.total === 1 ? 'report' : 'reports'}
-                className="fixed inset-x-0 bottom-0 z-20 border-t border-line-strong bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:static sm:z-auto sm:mt-auto sm:border-0 sm:bg-transparent sm:px-0 sm:pt-6 sm:pb-0 sm:backdrop-blur-none"
-              />
-            )}
-          </>
+          <ul aria-busy={busy} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {data.items.map((report) => (
+              <li key={report.id} className="min-w-0">
+                <ReportCard report={report} seesAll={seesAll} onView={() => setDrawer({ kind: 'view', report })} />
+              </li>
+            ))}
+          </ul>
         )}
       </div>
+
+      {/* Footer: the range and the page buttons, pinned to the bottom (fixed on phones, sticky in the scroller above). */}
+      {data && data.total > 0 && (
+        <Pagination
+          page={data.page}
+          totalPages={data.totalPages}
+          total={data.total}
+          pageSize={data.pageSize}
+          onPageChange={(next) => {
+            setSearch({ page: next })
+            // Start the new page at its first card, not where the last one was scrolled to.
+            document.querySelector('main')?.scrollTo({ top: 0 })
+            window.scrollTo({ top: 0 })
+          }}
+          busy={busy}
+          noun={data.total === 1 ? 'report' : 'reports'}
+          className="fixed inset-x-0 bottom-0 z-20 border-t border-line-strong bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:sticky sm:inset-x-auto sm:shrink-0 sm:bg-canvas/90 sm:px-10 sm:py-2.5"
+        />
+      )}
 
       {settings && (
         <ReportDrawer
@@ -187,8 +196,8 @@ export function ReportsPage() {
 
 /**
  * One report as a card, in the order a reviewer reads it: the day and who
- * filed it, when it was submitted (and whether that was late), then what the
- * report says. The whole card opens the report.
+ * filed it, then when it was submitted (and whether that was late). The works
+ * themselves are in the drawer. The whole card opens the report.
  */
 function ReportCard({ report, seesAll, onView }: { report: Report; seesAll: boolean; onView: () => void }) {
   const author = report.createdByName ?? 'Deleted user'
@@ -230,24 +239,13 @@ function ReportCard({ report, seesAll, onView }: { report: Report; seesAll: bool
             </span>
           )}
         </p>
-        <p className="mt-1.5 truncate text-label font-normal text-ink-2">{report.reports[0]}</p>
       </div>
 
-      {(report.attachment || report.remarks) && (
-        <div className="mt-auto flex w-full flex-col gap-1 pt-3 text-label font-normal text-ink-3">
-          {report.attachment && (
-            <span className="flex min-w-0 items-center gap-1.5">
-              <Link2 size={14} strokeWidth={1.9} aria-hidden className="shrink-0" />
-              <span className="truncate">{report.attachment.url.replace(/^https?:\/\//, '')}</span>
-            </span>
-          )}
-          {report.remarks && (
-            <span className="flex min-w-0 items-center gap-1.5">
-              <MessageSquareText size={14} strokeWidth={1.9} aria-hidden className="shrink-0" />
-              <span className="truncate">Remarks added</span>
-            </span>
-          )}
-        </div>
+      {report.remarks && (
+        <p className="mt-auto flex w-full min-w-0 items-center gap-1.5 pt-3 text-label font-normal text-ink-3">
+          <MessageSquareText size={14} strokeWidth={1.9} aria-hidden className="shrink-0" />
+          <span className="truncate">Remarks added</span>
+        </p>
       )}
     </button>
   )

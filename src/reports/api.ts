@@ -1,5 +1,5 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query'
-import { api } from '@/lib/api'
+import { api, apiUpload } from '@/lib/api'
 
 export interface Report {
   id: string
@@ -12,7 +12,11 @@ export interface Report {
   submittedAt: string
   updatedAt: string
   editedAt: string | null
-  attachment: { type: 'url'; url: string } | null
+  /** A link, or an uploaded file with a short-lived download link (`url`). */
+  attachment:
+    | { type: 'url'; url: string }
+    | { type: 'file'; name: string; size: number; contentType: string; url: string }
+    | null
   remarks: string | null
   /** Submitted after the due time on the day it covers. */
   late: boolean
@@ -59,12 +63,37 @@ export interface ReportPerson {
 export interface ReportInput {
   reportDate: string
   reports: string[]
-  attachmentMode: 'none' | 'url'
+  /** `keep` (edit only) leaves the current link or file as it is. */
+  attachmentMode: 'none' | 'url' | 'file' | 'keep'
   attachmentUrl?: string
+  /** With `file`: the key `uploadReportFile` returned, and the file's name. */
+  fileKey?: string
+  fileName?: string
 }
 
+/** A file in storage, waiting to be attached to a report. */
+export interface UploadedReportFile {
+  key: string
+  name: string
+  size: number
+  contentType: string
+}
+
+/** Largest file a report can carry (the server enforces it too). */
+export const MAX_REPORT_FILE_BYTES = 10 * 1024 * 1024
+
+/** What the file picker offers; the server checks the real bytes. */
+export const REPORT_FILE_ACCEPT =
+  '.pdf,.jpg,.jpeg,.png,.webp,.gif,.heic,.doc,.docx,.xls,.xlsx,.pptx,.csv,.txt'
+
+/** Uploads one file into storage; attach it by sending its key with the report. */
+export const uploadReportFile = (
+  file: File,
+  options: { onProgress?: (fraction: number) => void; signal?: AbortSignal } = {},
+) => apiUpload<UploadedReportFile>('/reports/files', file, options)
+
 /** Rows per page of the reports table. */
-export const REPORTS_PAGE_SIZE = 50
+export const REPORTS_PAGE_SIZE = 100
 
 /** Everything under Reports (pages, single reports, settings): invalidate after any change. */
 export const REPORTS_KEY = ['reports'] as const
