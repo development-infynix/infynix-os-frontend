@@ -22,6 +22,7 @@ import { Route as AuthedInvoicesRouteImport } from './routes/_authed/invoices'
 import { Route as AuthedMediaRouteImport } from './routes/_authed/media'
 import { Route as AuthedPaymentsBudgetRouteImport } from './routes/_authed/payments-budget'
 import { Route as AuthedProjectManagementRouteImport } from './routes/_authed/project-management'
+import { Route as AuthedReportsRouteImport } from './routes/_authed/reports'
 import { Route as AuthedAdminIndexRouteImport } from './routes/_authed/admin/index'
 import { Route as AuthedAdminUsersRouteImport } from './routes/_authed/admin/users'
 
@@ -89,6 +90,11 @@ const AuthedProjectManagementRoute = AuthedProjectManagementRouteImport.update({
   path: '/project-management',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedReportsRoute = AuthedReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedAdminIndexRoute = AuthedAdminIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -113,6 +119,7 @@ export interface FileRoutesByFullPath {
   '/media': typeof AuthedMediaRoute
   '/payments-budget': typeof AuthedPaymentsBudgetRoute
   '/project-management': typeof AuthedProjectManagementRoute
+  '/reports': typeof AuthedReportsRoute
   '/admin/users': typeof AuthedAdminUsersRoute
   '/admin/': typeof AuthedAdminIndexRoute
 }
@@ -127,6 +134,7 @@ export interface FileRoutesByTo {
   '/media': typeof AuthedMediaRoute
   '/payments-budget': typeof AuthedPaymentsBudgetRoute
   '/project-management': typeof AuthedProjectManagementRoute
+  '/reports': typeof AuthedReportsRoute
   '/': typeof AuthedIndexRoute
   '/admin/users': typeof AuthedAdminUsersRoute
   '/admin': typeof AuthedAdminIndexRoute
@@ -145,6 +153,7 @@ export interface FileRoutesById {
   '/_authed/media': typeof AuthedMediaRoute
   '/_authed/payments-budget': typeof AuthedPaymentsBudgetRoute
   '/_authed/project-management': typeof AuthedProjectManagementRoute
+  '/_authed/reports': typeof AuthedReportsRoute
   '/_authed/': typeof AuthedIndexRoute
   '/_authed/admin/users': typeof AuthedAdminUsersRoute
   '/_authed/admin/': typeof AuthedAdminIndexRoute
@@ -164,6 +173,7 @@ export interface FileRouteTypes {
     | '/media'
     | '/payments-budget'
     | '/project-management'
+    | '/reports'
     | '/admin/users'
     | '/admin/'
   fileRoutesByTo: FileRoutesByTo
@@ -178,6 +188,7 @@ export interface FileRouteTypes {
     | '/media'
     | '/payments-budget'
     | '/project-management'
+    | '/reports'
     | '/'
     | '/admin/users'
     | '/admin'
@@ -195,6 +206,7 @@ export interface FileRouteTypes {
     | '/_authed/media'
     | '/_authed/payments-budget'
     | '/_authed/project-management'
+    | '/_authed/reports'
     | '/_authed/'
     | '/_authed/admin/users'
     | '/_authed/admin/'
@@ -300,6 +312,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedProjectManagementRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/reports': {
+      id: '/_authed/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof AuthedReportsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/admin/': {
       id: '/_authed/admin/'
       path: '/'
@@ -340,6 +359,7 @@ interface AuthedRouteChildren {
   AuthedMediaRoute: typeof AuthedMediaRoute
   AuthedPaymentsBudgetRoute: typeof AuthedPaymentsBudgetRoute
   AuthedProjectManagementRoute: typeof AuthedProjectManagementRoute
+  AuthedReportsRoute: typeof AuthedReportsRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
 }
 
@@ -352,6 +372,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedMediaRoute: AuthedMediaRoute,
   AuthedPaymentsBudgetRoute: AuthedPaymentsBudgetRoute,
   AuthedProjectManagementRoute: AuthedProjectManagementRoute,
+  AuthedReportsRoute: AuthedReportsRoute,
   AuthedIndexRoute: AuthedIndexRoute,
 }
 

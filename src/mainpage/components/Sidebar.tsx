@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
+  BarChart3,
   CalendarDays,
   FolderKanban,
   Handshake,
@@ -27,6 +28,7 @@ type NavPath =
   | '/clients'
   | '/crm'
   | '/calendar'
+  | '/reports'
   | '/payments-budget'
   | '/project-management'
   | '/invoices'
@@ -45,6 +47,7 @@ const MAIN_NAV: NavItem[] = [
   { to: '/clients', label: 'Clients', icon: Users, access: 'clients' },
   { to: '/crm', label: 'CRM', icon: Handshake, access: 'crm' },
   { to: '/calendar', label: 'Calendar', icon: CalendarDays, access: 'calendar' },
+  { to: '/reports', label: 'Reports', icon: BarChart3, access: 'reports' },
   { to: '/payments-budget', label: 'Payments & Budget', icon: Wallet, access: 'payments-budget' },
   {
     to: '/project-management',
