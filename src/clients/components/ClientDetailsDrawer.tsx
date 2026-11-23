@@ -258,7 +258,7 @@ export function ClientDetailsDrawer({ client, onClose }: ClientDetailsDrawerProp
         icon={null}
         width="compact"
         title={`Delete ${client?.name ?? 'this client'}?`}
-        description="This removes the client from your directory. This can’t be undone."
+        description="This removes the client from your directory, along with their deals in every CRM pipeline. This can’t be undone."
         confirmLabel="Delete"
         pendingLabel="Deleting…"
         onConfirm={async () => {

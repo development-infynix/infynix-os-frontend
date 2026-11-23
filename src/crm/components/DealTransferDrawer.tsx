@@ -16,12 +16,11 @@ import {
 } from '@/lib/crm'
 import type { CrmPipeline } from '../types'
 import { PipelineOption } from './PipelineOption'
-import { RadioDot } from './StagePicker'
 
-const STEPS = ['Select', 'Stages', 'Destination'] as const
+const STEPS = ['Stages', 'Destination'] as const
 /** Add to pipeline (`copy`) or Move to pipeline, picked from the Deal transfer card's menu. */
 export type TransferAction = 'copy' | 'move'
-type Step = 1 | 2 | 3
+type Step = 1 | 2
 const number = new Intl.NumberFormat()
 
 interface Totals {
@@ -86,7 +85,7 @@ export function DealTransferDrawer({
   if (open !== wasOpen) {
     setWasOpen(open)
     if (open) {
-      setStep(dealIds !== undefined ? 3 : 1)
+      setStep(dealIds !== undefined ? 2 : 1)
       setStageIds(new Set())
       setTargetId(null)
       setTargetStageId(null)
@@ -184,8 +183,7 @@ export function DealTransferDrawer({
     }
   }
 
-  // Step 1 only offers By stage for now, so it's always ready.
-  const canNext = step === 1 ? true : step === 2 ? stageIds.size > 0 : Boolean(target && landing)
+  const canNext = step === 1 ? stageIds.size > 0 : Boolean(target && landing)
   const moving = action === 'move'
   const verb = moving ? 'Move' : 'Add'
   const plural = (n: number) => `${number.format(n)} deal${n === 1 ? '' : 's'}`
@@ -294,16 +292,6 @@ export function DealTransferDrawer({
               )}
             </div>
           ) : step === 1 ? (
-            <div role="radiogroup" aria-label="How to select deals" className="flex flex-col gap-3">
-              <p className="px-1 text-label font-medium text-ink-2">How to select deals</p>
-              <MethodCard
-                title="By stage"
-                description={`${moving ? 'Move' : 'Add'} every deal in the stages you choose.`}
-                selected
-              />
-              <MethodCard title="By fields" description="Pick deals by their details." disabled badge="Coming soon" />
-            </div>
-          ) : step === 2 ? (
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between px-1">
                 <p className="text-label font-medium text-ink-2">Choose stages</p>
@@ -382,7 +370,7 @@ export function DealTransferDrawer({
           )}
         </div>
 
-        {phase === 'choose' && step === 3 && target && (
+        {phase === 'choose' && step === 2 && target && (
           <div role="status" className="flex items-start gap-2.5 border-t border-line bg-secondary-soft/50 px-5 py-2.5 text-label text-ink">
             <Info size={16} strokeWidth={2} aria-hidden className="mt-0.5 shrink-0 text-secondary-text" />
             <p>{ownerNotice(target.name, moving, targetRules.isPending ? undefined : targetRules.data)}</p>
@@ -391,11 +379,7 @@ export function DealTransferDrawer({
         {phase !== 'done' && (
           <div className="flex items-center gap-2 border-t border-line bg-canvas/60 px-5 py-3.5">
             <span className="mr-auto text-label text-ink-3 tabular-nums">
-              {phase === 'choose' && step > 1
-                ? `${plural(selectedCount)} selected`
-                : phase === 'choose'
-                  ? `${pipeline.stages.length} stage${pipeline.stages.length === 1 ? '' : 's'} in ${pipeline.name}`
-                  : ''}
+              {phase === 'choose' ? `${plural(selectedCount)} selected` : ''}
             </span>
             {phase === 'failed' ? (
               <>
@@ -421,7 +405,7 @@ export function DealTransferDrawer({
                 >
                   {step === 1 || fromSelection ? 'Cancel' : 'Back'}
                 </Button>
-                {step < 3 ? (
+                {step < 2 ? (
                   <Button variant="primary" disabled={!canNext} onClick={() => setStep((step + 1) as Step)}>
                     Next
                   </Button>
@@ -463,45 +447,6 @@ function StepsStrip({ step }: { step: Step }) {
         )
       })}
     </ol>
-  )
-}
-
-/** A way to select deals (only By stage is available for now). */
-function MethodCard({
-  title,
-  description,
-  selected = false,
-  disabled = false,
-  badge,
-}: {
-  title: string
-  description: string
-  selected?: boolean
-  disabled?: boolean
-  badge?: string
-}) {
-  return (
-    <div
-      role="radio"
-      aria-checked={selected}
-      aria-disabled={disabled}
-      className={`card-3d flex items-start gap-3 rounded-xl p-4 ${selected ? 'outline-2 outline-secondary' : ''} ${
-        disabled ? 'opacity-60' : ''
-      }`}
-    >
-      <span className="mt-0.5">
-        <RadioDot checked={selected} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="text-body font-semibold text-ink">{title}</span>
-          {badge && (
-            <span className="rounded-md bg-surface-hover px-1.5 py-0.5 text-micro font-semibold text-ink-3">{badge}</span>
-          )}
-        </span>
-        <span className="mt-0.5 block text-label text-ink-2">{description}</span>
-      </span>
-    </div>
   )
 }
 

@@ -130,6 +130,18 @@ export function CrmPage() {
   const boardQuery = useQuery(crmBoardQuery(activePipelineId))
   const columns = boardQuery.data?.columns ?? {}
   const stages = boardQuery.data?.stages ?? pipeline?.stages ?? []
+
+  // Drop selected cards that are no longer on the board after a refresh (moved
+  // or deleted by someone else), so Move / Add / Delete only send real cards.
+  const [seenBoard, setSeenBoard] = useState(boardQuery.data)
+  if (boardQuery.data !== seenBoard) {
+    setSeenBoard(boardQuery.data)
+    if (boardQuery.data && selected.size) {
+      const onBoard = new Set(Object.values(boardQuery.data.columns).flatMap((cards) => cards.map((card) => card.id)))
+      const kept = [...selected].filter((id) => onBoard.has(id))
+      if (kept.length !== selected.size) setSelected(new Set(kept))
+    }
+  }
   const firstStage = stages[0]
 
   useEffect(() => writeStored(TAB_STORAGE_KEY, tab), [tab])

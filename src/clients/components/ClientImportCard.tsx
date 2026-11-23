@@ -257,7 +257,7 @@ export function ClientImportCard({
         icon={null}
         width="compact"
         title={`Delete ${item.name}?`}
-        description={`This removes the import and its ${item.createdCount} clients. This can’t be undone.`}
+        description={`This removes the import and its ${item.createdCount} clients, along with their deals in every CRM pipeline. This can’t be undone.`}
         confirmLabel="Delete"
         pendingLabel="Deleting…"
         footer={

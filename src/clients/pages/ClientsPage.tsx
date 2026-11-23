@@ -435,7 +435,7 @@ export function ClientsPage() {
         icon={null}
         width="compact"
         title={`Delete ${deleting?.name ?? 'this client'}?`}
-        description="This removes the client from the directory. This can’t be undone."
+        description="This removes the client from the directory, along with their deals in every CRM pipeline. This can’t be undone."
         confirmLabel="Delete"
         pendingLabel="Deleting…"
         onConfirm={async () => {
@@ -455,7 +455,7 @@ export function ClientsPage() {
         icon={null}
         width="compact"
         title={`Delete ${selected.size} clients?`}
-        description="These clients are removed from the directory. Import counts will be updated. This can’t be undone."
+        description="These clients are removed from the directory, along with their deals in every CRM pipeline. Import counts will be updated. This can’t be undone."
         confirmLabel="Delete"
         pendingLabel="Deleting…"
         onConfirm={async () => {
