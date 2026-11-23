@@ -1,14 +1,25 @@
 import { useId, type ReactNode } from 'react'
 
 /** A titled card of label/value rows, as used in the detail drawers. */
-export function Panel({ title, className = '', children }: { title: string; className?: string; children: ReactNode }) {
+export function Panel({
+  title,
+  className = '',
+  plain = false,
+  children,
+}: {
+  title: string
+  className?: string
+  /** Free content (a list, a form) instead of Detail rows. */
+  plain?: boolean
+  children: ReactNode
+}) {
   const id = useId()
   return (
     <section aria-labelledby={id} className={`overflow-hidden rounded-xl bg-surface shadow-lift ${className}`}>
       <h3 id={id} className="border-b border-line bg-canvas/50 px-3.5 py-2 text-caption font-semibold text-ink-2">
         {title}
       </h3>
-      <dl className="divide-y divide-line">{children}</dl>
+      {plain ? children : <dl className="divide-y divide-line">{children}</dl>}
     </section>
   )
 }
