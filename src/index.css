@@ -248,6 +248,16 @@ dialog.app-dialog:not([open])::backdrop {
 }
 
 /*
+ * While any modal dialog is open (drawers, forms, confirmations), the page
+ * behind it stays put: a native <dialog> traps focus but not scrolling, so
+ * lock the window (phones) and <main>, the scroller from tablet up.
+ */
+html:has(dialog:modal),
+html:has(dialog:modal) main {
+  overflow: hidden;
+}
+
+/*
  * Side drawer (user details): a full-height panel pinned to the right that
  * slides in over a scrim; slides back out on close.
  */
