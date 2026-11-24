@@ -95,7 +95,11 @@ export function ReportDrawer({ state, settings, me, onClose, onCreated }: Report
     }
   }
 
-  const title = state?.kind === 'new' ? 'New report' : report ? formatDayLong(report.reportDate) : ''
+  // The form reports why its picked date can't take the report (off day,
+  // already filed); the heading then says so, in muted red, instead of the title.
+  const [dateNotice, setDateNotice] = useState<string | null>(null)
+  const newNotice = editing ? dateNotice : null
+  const title = newNotice ?? (state?.kind === 'new' ? 'New report' : report ? formatDayLong(report.reportDate) : '')
   const isOwner = me.role === 'owner'
 
   return (
@@ -117,10 +121,18 @@ export function ReportDrawer({ state, settings, me, onClose, onCreated }: Report
           <div className="flex h-full flex-col">
             <div className="flex items-center gap-2 border-b border-line px-4 py-3.5">
               <div className="min-w-0 flex-1">
-                <p className="text-caption text-ink-3">
-                  {editing && report ? 'Edit report' : 'Daily report'}
-                </p>
-                <h2 id={titleId} className="truncate text-title font-semibold tracking-title">
+                {/* The notice stands alone; otherwise a small caption names the drawer. */}
+                {!newNotice && (
+                  <p className="text-caption text-ink-3">{editing && report ? 'Edit report' : 'Daily report'}</p>
+                )}
+                <h2
+                  id={titleId}
+                  className={
+                    newNotice
+                      ? 'text-body leading-5 font-semibold text-danger/75'
+                      : 'truncate text-title font-semibold tracking-title'
+                  }
+                >
                   {title}
                 </h2>
               </div>
@@ -139,6 +151,7 @@ export function ReportDrawer({ state, settings, me, onClose, onCreated }: Report
                 report={report}
                 settings={settings}
                 initialDate={state.kind === 'new' ? state.date : undefined}
+                onDateNoticeChange={setDateNotice}
                 onCancel={() => (report ? setEditing(false) : close())}
                 onSubmit={async (input) => {
                   if (report) {
@@ -154,7 +167,7 @@ export function ReportDrawer({ state, settings, me, onClose, onCreated }: Report
               />
             ) : report ? (
               <div className="flex min-h-0 flex-1 flex-col">
-                <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-canvas px-4 py-4">
+                <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto bg-canvas px-4 py-4 [&>*]:shrink-0">
                   <Panel title="Report">
                     <Detail label="Date">
                       <span className="tabular-nums">{formatDay(report.reportDate)}</span>
