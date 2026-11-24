@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/Button'
 import { FormError, FormField } from '@/components/FormField'
+import { Select } from '@/components/Select'
 import { ApiError } from '@/lib/api'
 import {
   TYPE_LABEL,
@@ -144,6 +145,7 @@ export function EventForm({ type, event, day, timezone, canChangeVisibility, onC
         {event && (
           <FormField
             label="Status"
+            htmlFor="event-status"
             hint={
               cancelling
                 ? `It stays on the calendar, marked cancelled. You can bring it back until its start time.`
@@ -154,43 +156,27 @@ export function EventForm({ type, event, day, timezone, canChangeVisibility, onC
                     : 'Upcoming, live and ended follow the time. You can cancel it.'
             }
           >
-            <div className="flex w-fit flex-wrap gap-1 rounded-xl bg-canvas p-1.5 shadow-well">
-              {STATUSES.map(({ id, label }) => {
-                const current = id === currentStatus
-                // The current status (to undo a change), and the one move from it:
-                // upcoming ↔ cancelled. Live and ended follow the clock.
-                const selectable =
-                  current ||
+            <Select<EffectiveStatus>
+              id="event-status"
+              aria-label="Status"
+              className="sm:max-w-64"
+              value={targetStatus}
+              disabled={saving}
+              onChange={setTargetStatus}
+              // The current status (to undo a change), and the one move from it:
+              // upcoming ↔ cancelled. Live and ended follow the clock, so they're listed but disabled.
+              options={STATUSES.map(({ id, label }) => ({
+                value: id,
+                label,
+                meta: id === currentStatus ? 'now' : undefined,
+                danger: id === 'cancelled' && currentStatus !== 'cancelled',
+                disabled: !(
+                  id === currentStatus ||
                   (currentStatus === 'upcoming' && id === 'cancelled') ||
                   (currentStatus === 'cancelled' && id === 'upcoming')
-                const selected = id === targetStatus
-                return (
-                  <label
-                    key={id}
-                    className={`inline-flex h-8 min-w-[5.5rem] items-center justify-center rounded-lg px-3 text-label transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--focus)] ${
-                      selected
-                        ? id === 'cancelled'
-                          ? 'btn btn-danger'
-                          : 'btn btn-primary'
-                        : selectable
-                          ? 'cursor-pointer font-medium text-ink-2 hover:bg-surface-hover hover:text-ink'
-                          : 'cursor-not-allowed font-medium text-ink-3 opacity-50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="event-status"
-                      value={id}
-                      checked={selected}
-                      disabled={!selectable || saving}
-                      onChange={() => setTargetStatus(id)}
-                      className="sr-only"
-                    />
-                    {label}
-                  </label>
-                )
-              })}
-            </div>
+                ),
+              }))}
+            />
             {cancelling && (
               <input
                 aria-label="Reason for cancelling (optional)"

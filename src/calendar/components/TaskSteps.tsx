@@ -1,13 +1,23 @@
 import { useState } from 'react'
-import { AlertDialog } from '@/components/Alert'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormField'
+import { Select } from '@/components/Select'
 import { ApiError } from '@/lib/api'
-import { stepTask, type AllowedTaskAction, type CalendarEvent, type TaskAction, type TaskField } from '../api'
+import {
+  STATUS_LABEL,
+  stepTask,
+  type AllowedTaskAction,
+  type CalendarEvent,
+  type TaskAction,
+  type TaskField,
+  type TaskStatus,
+} from '../api'
 import { wallParts, zonedInstant } from '../lib/zoned'
 
 /*
- * The next-step panel (decision T7). The server decides which steps this
+ * The task's Status dropdown (decision T7, revised): one select for the
+ * assignee and the creator/owner alike, listing only the moves this viewer may
+ * make. Picking one shows its inputs and a Save; nothing changes until then. The server decides which steps this
  * viewer may take (`permissions.actions`); this file only gives them labels,
  * tones and input forms, as the ERP's `lib/policy.js` did.
  */
@@ -50,7 +60,7 @@ const FIELDS: Record<TaskField, { label: string; kind: 'text' | 'datetime'; hint
   extensionReason: { label: 'Why do you need more time?', kind: 'text' },
 }
 
-/** Requests for more time come first when pending; destructive steps always last. */
+/** Forward moves first, neutral ones next, destructive ones last. */
 const order = (a: AllowedTaskAction) => {
   const tone = STEPS[a.action].tone
   return tone === 'danger' ? 2 : tone === 'primary' ? 0 : 1
@@ -67,12 +77,12 @@ interface TaskStepsProps {
 export function TaskSteps({ event, timezone, now, onChanged }: TaskStepsProps) {
   const actions = [...event.permissions.actions].sort((a, b) => order(a) - order(b))
   const [active, setActive] = useState<AllowedTaskAction | null>(null)
-  const [confirming, setConfirming] = useState<AllowedTaskAction | null>(null)
-  const [busy, setBusy] = useState<TaskAction | null>(null)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const current = event.effectiveStatus as TaskStatus
 
   async function run(action: TaskAction, input: Partial<Record<TaskField, string>> = {}) {
-    setBusy(action)
+    setBusy(true)
     setError(null)
     try {
       await stepTask(event.id, event.version, action, input)
@@ -81,80 +91,66 @@ export function TaskSteps({ event, timezone, now, onChanged }: TaskStepsProps) {
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 409) await onChanged()
       setError(cause instanceof ApiError && cause.status !== 500 ? cause.message : 'Couldn’t save. Try again.')
-      throw cause
     } finally {
-      setBusy(null)
+      setBusy(false)
     }
   }
 
   if (!actions.length) return null
 
   return (
-    <section aria-label="Next step" className="rounded-xl bg-surface p-3.5 shadow-lift">
-      {active ? (
+    <section aria-label="Status" className="rounded-xl bg-surface p-3.5 shadow-lift">
+      <label htmlFor="task-status" className="block text-label font-semibold text-ink-2">
+        Status
+      </label>
+      <Select<string>
+        id="task-status"
+        aria-label="Status"
+        className="mt-1.5"
+        value={active?.action ?? ''}
+        disabled={busy}
+        onChange={(value) => {
+          setError(null)
+          setActive(actions.find((a) => a.action === value) ?? null)
+        }}
+        options={[
+          { value: '', label: STATUS_LABEL[current], meta: 'now' },
+          ...actions.map((step) => ({
+            value: step.action,
+            label: optionLabel(step, current),
+            danger: STEPS[step.action].tone === 'danger',
+          })),
+        ]}
+      />
+      {!active && <FormError message={error} />}
+      {active && (
         <StepForm
           key={active.action}
           step={active}
           event={event}
           timezone={timezone}
           now={now}
-          busy={busy === active.action}
+          busy={busy}
           error={error}
           onBack={() => {
             setActive(null)
             setError(null)
           }}
-          onSubmit={(input) => run(active.action, input).catch(() => undefined)}
+          onSubmit={(input) => void run(active.action, input)}
         />
-      ) : (
-        <>
-          <h3 className="text-label font-semibold text-ink-2">Next step</h3>
-          <FormError message={error} />
-          <div className="mt-2.5 flex flex-wrap gap-2">
-            {actions.map((step) => {
-              const meta = STEPS[step.action]
-              return (
-                <Button
-                  key={step.action}
-                  variant={meta.tone === 'primary' ? 'primary' : 'secondary'}
-                  className={meta.tone === 'danger' ? 'text-danger' : ''}
-                  loading={busy === step.action}
-                  disabled={busy !== null}
-                  onClick={() => {
-                    setError(null)
-                    if (Object.keys(step.fields).length) setActive(step)
-                    else if (meta.confirm) setConfirming(step)
-                    else void run(step.action).catch(() => undefined)
-                  }}
-                >
-                  {meta.label}
-                </Button>
-              )
-            })}
-          </div>
-        </>
       )}
-
-      <AlertDialog
-        open={confirming !== null}
-        onOpenChange={(next) => !next && setConfirming(null)}
-        tone="danger"
-        icon={null}
-        width="compact"
-        title={confirming ? STEPS[confirming.action].label : ''}
-        description={confirming ? STEPS[confirming.action].confirm : ''}
-        confirmLabel={confirming ? STEPS[confirming.action].label : ''}
-        cancelLabel="Keep it"
-        pendingLabel="Saving…"
-        onConfirm={async () => {
-          if (confirming) await run(confirming.action)
-        }}
-      />
     </section>
   )
 }
 
-/** A step's inputs, in place of the buttons. Dates and times are in the company timezone. */
+/** "Submit → In review"; a step that keeps the status (more time) is just its name. */
+function optionLabel(step: AllowedTaskAction, current: TaskStatus) {
+  const meta = STEPS[step.action]
+  const name = meta.heading ?? meta.label
+  return step.to === current ? name : `${name} → ${STATUS_LABEL[step.to]}`
+}
+
+/** The chosen move's inputs and its Save, under the Status select. Dates and times are in the company timezone. */
 function StepForm({
   step,
   event,
@@ -206,9 +202,9 @@ function StepForm({
         e.preventDefault()
         submit()
       }}
-      className="flex flex-col gap-3.5"
+      className="mt-3.5 flex flex-col gap-3.5"
     >
-      <h3 className="text-body font-semibold text-ink">{meta.heading ?? meta.label}</h3>
+      {meta.confirm && <p className="text-label text-ink-2">{meta.confirm}</p>}
       <FormError message={error} />
       {names.map((name) => {
         const field = FIELDS[name]
@@ -249,10 +245,10 @@ function StepForm({
       })}
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onBack} disabled={busy}>
-          Back
+          Undo
         </Button>
         <Button type="submit" variant={meta.tone === 'danger' ? 'danger' : 'primary'} loading={busy}>
-          {meta.label}
+          {busy ? 'Saving…' : meta.label}
         </Button>
       </div>
     </form>

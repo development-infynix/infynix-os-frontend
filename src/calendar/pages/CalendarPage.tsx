@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
-import { ChevronLeft, ChevronRight, Clock, Flag, Lock, MapPin, RefreshCw, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Lock, MapPin, RefreshCw, X } from 'lucide-react'
+import { FaCalendarTimes } from 'react-icons/fa'
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/Button'
 import { Loader } from '@/components/Loader'
@@ -9,7 +10,6 @@ import { useSession } from '@/lib/auth'
 import { addMonths, formatMonth, monthGrid, monthOf } from '@/lib/calendar'
 import {
   CALENDAR_KEY,
-  PRIORITY_LABEL,
   TYPE_LABEL,
   calendarContextQuery,
   calendarEventQuery,
@@ -404,8 +404,7 @@ function EventCard({
 }
 
 /**
- * A task in the day panel: due time, priority when it matters (high, urgent),
- * and the other person: who it's for, or who it's from when it's yours to do.
+ * A task in the day panel: due time and the other person: who it's for, or who it's from when it's yours to do.
  */
 function TaskCard({
   task,
@@ -442,14 +441,6 @@ function TaskCard({
         <span className="inline-flex min-w-0 flex-1 items-center gap-1.5 text-caption text-ink-3">
           <Icon size={13} strokeWidth={2} aria-hidden className="shrink-0" />
           Task
-          {(task.priority === 'high' || task.priority === 'urgent') && (
-            <span
-              className={`inline-flex items-center gap-1 font-medium ${task.priority === 'urgent' ? 'text-danger/75' : 'text-ink-2'}`}
-            >
-              <Flag size={11} strokeWidth={2.2} aria-hidden />
-              {PRIORITY_LABEL[task.priority]}
-            </span>
-          )}
         </span>
         <StatusTag status={status} rejectCount={task.rejectCount} />
       </div>
@@ -461,7 +452,7 @@ function TaskCard({
       <p
         className={`mt-1 flex items-center gap-1.5 text-label tabular-nums ${status === 'failed' ? 'text-danger/75' : 'text-ink-2'}`}
       >
-        <Clock size={13} strokeWidth={1.9} aria-hidden className="shrink-0" />
+        <FaCalendarTimes size={12} aria-hidden className="shrink-0" />
         Due {formatClockIn(task.endsAt, timezone)}
       </p>
       <p className="mt-2 w-full truncate text-caption text-ink-3">
