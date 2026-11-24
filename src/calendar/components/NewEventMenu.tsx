@@ -1,9 +1,9 @@
-import { ChevronDown, Megaphone, Plus, Users } from 'lucide-react'
+import { ChevronDown, Plus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/Button'
 import { TYPE_LABEL, type CalendarEventType } from '../api'
 
-const TYPE_ICON = { announcement: Megaphone, meeting: Users } as const
+import { TYPE_ICON } from '../lib/type-icon'
 
 interface NewEventMenuProps {
   types: CalendarEventType[]

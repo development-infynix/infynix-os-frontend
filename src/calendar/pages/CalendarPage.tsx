@@ -1,15 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
-import {
-  ChevronLeft,
-  ChevronRight,
-  Lock,
-  RefreshCw,
-  MapPin,
-  Megaphone,
-  Users,
-  X,
-} from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock, Flag, Lock, MapPin, RefreshCw, X } from 'lucide-react'
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/Button'
 import { Loader } from '@/components/Loader'
@@ -18,6 +9,7 @@ import { useSession } from '@/lib/auth'
 import { addMonths, formatMonth, monthGrid, monthOf } from '@/lib/calendar'
 import {
   CALENDAR_KEY,
+  PRIORITY_LABEL,
   TYPE_LABEL,
   calendarContextQuery,
   calendarEventQuery,
@@ -27,10 +19,11 @@ import {
 } from '../api'
 import { CalendarEmpty } from '../components/CalendarEmpty'
 import { NewEventMenu } from '../components/NewEventMenu'
+import { TYPE_ICON } from '../lib/type-icon'
 import { EventDrawer, type EventDrawerState } from '../components/EventDrawer'
 import { StatusTag } from '../components/StatusTag'
 import { statusAt, useStatusClock } from '../lib/live-status'
-import { dayIn, daysCovered, formatSpan } from '../lib/zoned'
+import { dayIn, daysCovered, formatClockIn, formatSpan } from '../lib/zoned'
 
 const route = getRouteApi('/_authed/calendar')
 
@@ -47,7 +40,8 @@ const formatDayLong = (day: string) => {
   return longDay.format(new Date(Date.UTC(y, m - 1, d)))
 }
 
-const TYPE_ICON = { announcement: Megaphone, meeting: Users } as const
+/** When an event sits in a day's list: a task at its deadline, the rest at their start. */
+const sortKey = (event: CalendarEvent) => Date.parse(event.type === 'task' ? event.endsAt : event.startsAt)
 
 /**
  * Calendar: the selected day's events on the left, the month on the right
@@ -56,9 +50,9 @@ const TYPE_ICON = { announcement: Megaphone, meeting: Users } as const
  */
 export function CalendarPage() {
   const { user } = useSession()
-  /** C1: owners and managers post announcements; everyone schedules meetings. */
+  /** C1: owners and managers post announcements; everyone schedules meetings and creates tasks (T4). */
   const creatable: CalendarEventType[] =
-    user.role === 'owner' || user.role === 'manager' ? ['announcement', 'meeting'] : ['meeting']
+    user.role === 'owner' || user.role === 'manager' ? ['announcement', 'meeting', 'task'] : ['meeting', 'task']
 
   const queryClient = useQueryClient()
   const contextQuery = useQuery(calendarContextQuery())
@@ -105,7 +99,12 @@ export function CalendarPage() {
     const map = new Map<string, CalendarEvent[]>()
     if (!context) return map
     for (const event of events) {
-      for (const day of daysCovered(event.startsAt, event.endsAt, context.timezone)) {
+      // A task sits on its deadline day only (T8).
+      const days =
+        event.type === 'task'
+          ? [dayIn(Date.parse(event.endsAt), context.timezone)]
+          : daysCovered(event.startsAt, event.endsAt, context.timezone)
+      for (const day of days) {
         const list = map.get(day)
         if (list) list.push(event)
         else map.set(day, [event])
@@ -113,6 +112,18 @@ export function CalendarPage() {
     }
     return map
   }, [events, context])
+
+  // A task's steps depend on its status, and the server lists them. When the clock
+  // moves a task on (failed at its deadline, a hold ending), reload once so the
+  // steps match; meetings need no reload, their buttons follow the clock here.
+  const serverItems = rangeQuery.data?.items
+  const clockMovedTask = useMemo(
+    () => (serverItems ?? []).some((e) => e.type === 'task' && statusAt(e, now) !== e.effectiveStatus),
+    [serverItems, now],
+  )
+  useEffect(() => {
+    if (clockMovedTask) void queryClient.invalidateQueries({ queryKey: CALENDAR_KEY })
+  }, [clockMovedTask]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // The open event comes from the URL, loaded by id so it stays fresh after an edit.
   const openId = search.event ?? null
@@ -158,7 +169,7 @@ export function CalendarPage() {
   }
 
   const dayEvents = [...(byDay.get(date) ?? [])].sort(
-    (a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt) || a.title.localeCompare(b.title),
+    (a, b) => sortKey(a) - sortKey(b) || a.title.localeCompare(b.title),
   )
   // The day's events (or why there are none): the desktop panel and the phone drawer share it.
   const dayBody = rangeQuery.isPending ? (
@@ -187,7 +198,12 @@ export function CalendarPage() {
     <ul className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain bg-canvas/40 p-3">
       {dayEvents.map((event) => (
         <li key={event.id}>
-          <EventCard event={event} timezone={context.timezone} onOpen={() => setSearch({ event: event.id })} />
+          <EventCard
+            event={event}
+            timezone={context.timezone}
+            viewerId={user.id}
+            onOpen={() => setSearch({ event: event.id })}
+          />
         </li>
       ))}
     </ul>
@@ -290,14 +306,15 @@ export function CalendarPage() {
         day={date}
         timezone={context.timezone}
         now={now}
+        viewer={{ id: user.id, fullName: user.fullName, role: user.role }}
         onClose={() => {
           setNewType(null)
           setSearch({ event: null })
         }}
         onCreated={(created) => {
           setNewType(null)
-          // Jump to the day it starts on, in the company's timezone.
-          const startDay = dayIn(Date.parse(created.startsAt), context.timezone)
+          // Jump to the day it starts on (a task: the day it's due), in the company's timezone.
+          const startDay = dayIn(Date.parse(created.type === 'task' ? created.endsAt : created.startsAt), context.timezone)
           void navigate({ search: { month: monthOf(startDay), date: startDay, event: created.id } })
         }}
       />
@@ -305,10 +322,17 @@ export function CalendarPage() {
   )
 }
 
+/** A day dot's colour: green while something is happening, muted red when a task failed, ink while open, muted when done. */
+function dotTone(status: CalendarEvent['effectiveStatus']) {
+  if (status === 'live' || status === 'progress') return 'bg-secondary'
+  if (status === 'failed') return 'bg-danger/75'
+  if (status === 'ended' || status === 'cancelled' || status === 'completed') return 'bg-line-strong'
+  return 'bg-ink-2'
+}
+
 /**
  * In the day cell's bottom-right corner: one dot per event, at most three, then
- * a "+" when there are more. Live is green, upcoming ink, ended or cancelled
- * muted. The day panel carries the details.
+ * a "+" when there are more (tones from `dotTone`). The day panel carries the details.
  */
 function DayMarks({ events }: { events: CalendarEvent[] }) {
   if (!events.length) return null
@@ -318,13 +342,7 @@ function DayMarks({ events }: { events: CalendarEvent[] }) {
       {events.slice(0, 3).map((event) => (
         <span
           key={event.id}
-          className={`size-1.5 shrink-0 rounded-full ${
-            event.effectiveStatus === 'live'
-              ? 'bg-secondary'
-              : event.effectiveStatus === 'upcoming'
-                ? 'bg-ink-2'
-                : 'bg-line-strong'
-          }`}
+          className={`size-1.5 shrink-0 rounded-full ${dotTone(event.effectiveStatus)}`}
         />
       ))}
       {events.length > 3 && <span className="text-micro leading-none font-semibold text-ink-3">+</span>}
@@ -333,7 +351,18 @@ function DayMarks({ events }: { events: CalendarEvent[] }) {
 }
 
 /** One event in the day panel; the whole card opens it. */
-function EventCard({ event, timezone, onOpen }: { event: CalendarEvent; timezone: string; onOpen: () => void }) {
+function EventCard({
+  event,
+  timezone,
+  viewerId,
+  onOpen,
+}: {
+  event: CalendarEvent
+  timezone: string
+  viewerId: string
+  onOpen: () => void
+}) {
+  if (event.type === 'task') return <TaskCard task={event} timezone={timezone} viewerId={viewerId} onOpen={onOpen} />
   const Icon = TYPE_ICON[event.type]
   const cancelled = event.effectiveStatus === 'cancelled'
   return (
@@ -369,6 +398,75 @@ function EventCard({ event, timezone, onOpen }: { event: CalendarEvent; timezone
       <p className="mt-2 w-full truncate text-caption text-ink-3">
         {event.type === 'meeting' ? 'Host' : 'Posted by'}: {event.createdByName ?? 'Deleted user'}
         {event.visibility === 'private' && event.members.length > 0 && ` · ${event.members.length} invited`}
+      </p>
+    </button>
+  )
+}
+
+/**
+ * A task in the day panel: due time, priority when it matters (high, urgent),
+ * and the other person: who it's for, or who it's from when it's yours to do.
+ */
+function TaskCard({
+  task,
+  timezone,
+  viewerId,
+  onOpen,
+}: {
+  task: CalendarEvent
+  timezone: string
+  viewerId: string
+  onOpen: () => void
+}) {
+  const Icon = TYPE_ICON.task
+  const status = task.effectiveStatus
+  const finished = status === 'cancelled' || status === 'completed'
+  const mine = task.assigneeId === viewerId
+  const self = task.assigneeId !== null && task.assigneeId === task.createdBy
+  const who = self
+    ? mine
+      ? 'For you'
+      : `For ${task.assigneeName}`
+    : mine
+      ? `From ${task.createdByName ?? 'Deleted user'}`
+      : `For ${task.assigneeName ?? 'Deleted user'}`
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-haspopup="dialog"
+      aria-label={`Task: ${task.title}`}
+      className="card-3d flex w-full flex-col rounded-xl p-3.5 text-left"
+    >
+      <div className="flex w-full items-center gap-2">
+        <span className="inline-flex min-w-0 flex-1 items-center gap-1.5 text-caption text-ink-3">
+          <Icon size={13} strokeWidth={2} aria-hidden className="shrink-0" />
+          Task
+          {(task.priority === 'high' || task.priority === 'urgent') && (
+            <span
+              className={`inline-flex items-center gap-1 font-medium ${task.priority === 'urgent' ? 'text-danger/75' : 'text-ink-2'}`}
+            >
+              <Flag size={11} strokeWidth={2.2} aria-hidden />
+              {PRIORITY_LABEL[task.priority]}
+            </span>
+          )}
+        </span>
+        <StatusTag status={status} rejectCount={task.rejectCount} />
+      </div>
+      <p
+        className={`mt-1.5 line-clamp-2 w-full text-body font-semibold break-words ${finished ? 'text-ink-3' : 'text-ink'} ${status === 'cancelled' ? 'line-through' : ''}`}
+      >
+        {task.title}
+      </p>
+      <p
+        className={`mt-1 flex items-center gap-1.5 text-label tabular-nums ${status === 'failed' ? 'text-danger/75' : 'text-ink-2'}`}
+      >
+        <Clock size={13} strokeWidth={1.9} aria-hidden className="shrink-0" />
+        Due {formatClockIn(task.endsAt, timezone)}
+      </p>
+      <p className="mt-2 w-full truncate text-caption text-ink-3">
+        {who}
+        {task.extensionUntil && ' · more time asked'}
       </p>
     </button>
   )

@@ -7,19 +7,24 @@ import { Detail, Muted, Panel } from '@/components/DetailPanel'
 import { ApiError } from '@/lib/api'
 import {
   CALENDAR_KEY,
+  PRIORITY_LABEL,
   TYPE_LABEL,
   cancelCalendarEvent,
   createCalendarEvent,
   deleteCalendarEvent,
   restoreCalendarEvent,
   updateCalendarEvent,
+  updateTask,
   type CalendarEvent,
   type CalendarEventInput,
   type CalendarEventType,
+  type TaskInput,
 } from '../api'
 import { formatStampIn } from '../lib/zoned'
 import { EventForm, type StatusStep } from './EventForm'
 import { StatusTag } from './StatusTag'
+import { TaskForm, type TaskViewer } from './TaskForm'
+import { TaskSteps } from './TaskSteps'
 
 /** What the drawer shows: a new event of a type, or one event (view, then edit). */
 export type EventDrawerState = { kind: 'new'; type: CalendarEventType } | { kind: 'view'; event: CalendarEvent } | null
@@ -30,6 +35,8 @@ interface EventDrawerProps {
   timezone: string
   /** The page's live clock (lib/live-status), so the buttons change on time. */
   now: number
+  /** Who is looking: task forms narrow the assignee to what they may pick. */
+  viewer: TaskViewer
   onClose: () => void
   /** A new event was saved: show it. */
   onCreated: (event: CalendarEvent) => void
@@ -55,7 +62,18 @@ function diff(event: CalendarEvent, input: CalendarEventInput): Partial<Calendar
   return changes
 }
 
-export function EventDrawer({ state, day, timezone, now, onClose, onCreated }: EventDrawerProps) {
+/** A task edit sends only what changed (reassigning or moving the deadline has effects). */
+function taskDiff(event: CalendarEvent, input: TaskInput): Partial<TaskInput> {
+  const changes: Partial<TaskInput> = {}
+  if (input.title !== event.title) changes.title = input.title
+  if ((input.description ?? '') !== (event.description ?? '')) changes.description = input.description
+  if (Date.parse(input.deadline) !== Date.parse(event.endsAt)) changes.deadline = input.deadline
+  if (input.assigneeId !== event.assigneeId) changes.assigneeId = input.assigneeId
+  if (input.priority !== event.priority) changes.priority = input.priority
+  return changes
+}
+
+export function EventDrawer({ state, day, timezone, now, viewer, onClose, onCreated }: EventDrawerProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const queryClient = useQueryClient()
@@ -81,13 +99,36 @@ export function EventDrawer({ state, day, timezone, now, onClose, onCreated }: E
   // cancelled → delete, plus edit (and restore) until its start time.
   const status = event?.effectiveStatus
   const beforeStart = !!event && now < Date.parse(event.startsAt)
-  const canEdit =
-    !!event?.permissions.canEdit && (status === 'upcoming' || (status === 'cancelled' && beforeStart))
-  const canDelete = !!event?.permissions.canDelete && status !== 'live'
+  const isTask = event?.type === 'task'
+  // Tasks: the server's permissions (the page reloads them when the clock moves a task on).
+  const canEdit = isTask
+    ? !!event?.permissions.canEdit
+    : !!event?.permissions.canEdit && (status === 'upcoming' || (status === 'cancelled' && beforeStart))
+  const canDelete = isTask ? !!event?.permissions.canDelete : !!event?.permissions.canDelete && status !== 'live'
   // A live event can only be cancelled, and that's final (its start has passed).
   const canCancelLive = !!event?.permissions.canCancel && status === 'live'
   const type = state?.kind === 'new' ? state.type : (event?.type ?? 'meeting')
   const title = state?.kind === 'new' ? `New ${TYPE_LABEL[type].toLowerCase()}` : (event?.title ?? '')
+
+  async function submitTask(input: TaskInput) {
+    if (event) {
+      const changes = taskDiff(event, input)
+      if (Object.keys(changes).length) {
+        try {
+          await updateTask(event.id, { version: event.version, ...changes })
+        } catch (cause) {
+          if (cause instanceof ApiError && cause.status === 409) await refresh()
+          throw cause
+        }
+      }
+      await refresh()
+      setEditing(false)
+    } else {
+      const created = await createCalendarEvent({ type: 'task', ...input })
+      await refresh()
+      onCreated(created)
+    }
+  }
 
   async function submit(input: CalendarEventInput, step: StatusStep | null) {
     if (event) {
@@ -108,7 +149,7 @@ export function EventDrawer({ state, day, timezone, now, onClose, onCreated }: E
       await refresh()
       setEditing(false)
     } else {
-      const created = await createCalendarEvent({ type, ...input })
+      const created = await createCalendarEvent({ type: type === 'announcement' ? 'announcement' : 'meeting', ...input })
       await refresh()
       onCreated(created)
     }
@@ -150,7 +191,16 @@ export function EventDrawer({ state, day, timezone, now, onClose, onCreated }: E
               </button>
             </div>
 
-            {editing ? (
+            {editing && type === 'task' ? (
+              <TaskForm
+                event={event}
+                day={day}
+                timezone={timezone}
+                viewer={viewer}
+                onCancel={() => (event ? setEditing(false) : onClose())}
+                onSubmit={submitTask}
+              />
+            ) : editing ? (
               <EventForm
                 type={type}
                 event={event}
@@ -164,6 +214,12 @@ export function EventDrawer({ state, day, timezone, now, onClose, onCreated }: E
             ) : event ? (
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto bg-canvas px-4 py-4 [&>*]:shrink-0">
+                  {isTask ? (
+                    <>
+                      <TaskSteps event={event} timezone={timezone} now={now} onChanged={refresh} />
+                      <TaskDetails event={event} timezone={timezone} viewerId={viewer.id} />
+                    </>
+                  ) : (
                   <Panel title="Details">
                     <Detail label="Status">
                       <StatusTag status={event.effectiveStatus} />
@@ -209,9 +265,13 @@ export function EventDrawer({ state, day, timezone, now, onClose, onCreated }: E
                     )}
                     {event.cancelReason && <Detail label="Why cancelled">{event.cancelReason}</Detail>}
                   </Panel>
+                  )}
 
                   {event.description && (
-                    <Panel title={event.type === 'meeting' ? 'Agenda' : 'Announcement'} plain>
+                    <Panel
+                      title={event.type === 'meeting' ? 'Agenda' : event.type === 'task' ? 'Details' : 'Announcement'}
+                      plain
+                    >
                       <p className="px-3.5 py-3 text-body leading-6 break-words whitespace-pre-wrap text-ink">
                         {event.description}
                       </p>
@@ -294,7 +354,11 @@ export function EventDrawer({ state, day, timezone, now, onClose, onCreated }: E
         icon={null}
         width="compact"
         title={`Delete this ${event ? TYPE_LABEL[event.type].toLowerCase() : 'event'}?`}
-        description="It disappears from everyone’s calendar. This can’t be undone."
+        description={
+          isTask
+            ? 'It disappears for its creator and the person doing it. This can’t be undone.'
+            : 'It disappears from everyone’s calendar. This can’t be undone.'
+        }
         confirmLabel="Delete"
         pendingLabel="Deleting…"
         onConfirm={async () => {
@@ -308,6 +372,55 @@ export function EventDrawer({ state, day, timezone, now, onClose, onCreated }: E
   )
 }
 
+
+/** A task's facts: who, when it's due, and whatever its workflow is holding (a hold, a request, notes). */
+function TaskDetails({ event, timezone, viewerId }: { event: CalendarEvent; timezone: string; viewerId: string }) {
+  const status = event.effectiveStatus
+  const person = (id: string | null, name: string | null) =>
+    name ? (id === viewerId ? `${name} (you)` : name) : <Muted>Deleted user</Muted>
+  return (
+    <Panel title="Details">
+      <Detail label="Status">
+        <StatusTag status={status} rejectCount={event.rejectCount} />
+      </Detail>
+      <Detail label="Due">
+        <span className={`tabular-nums ${status === 'failed' ? 'font-medium text-danger/75' : ''}`}>
+          {formatStampIn(event.endsAt, timezone)}
+        </span>
+      </Detail>
+      <Detail label="Priority">
+        <span className={event.priority === 'urgent' ? 'font-medium text-danger/75' : ''}>
+          {PRIORITY_LABEL[event.priority ?? 'medium']}
+        </span>
+      </Detail>
+      <Detail label="Assigned to">{person(event.assigneeId, event.assigneeName)}</Detail>
+      <Detail label="Created by">{person(event.createdBy, event.createdByName)}</Detail>
+      {status === 'on_hold' && event.holdUntil && (
+        <Detail label="On hold until">
+          <span className="tabular-nums">{formatStampIn(event.holdUntil, timezone)}</span>
+          {event.holdReason && <span className="mt-0.5 block text-ink-2">{event.holdReason}</span>}
+        </Detail>
+      )}
+      {event.extensionUntil && (
+        <Detail label="More time asked">
+          <span className="tabular-nums">Until {formatStampIn(event.extensionUntil, timezone)}</span>
+          {event.extensionReason && <span className="mt-0.5 block text-ink-2">{event.extensionReason}</span>}
+        </Detail>
+      )}
+      {event.cancelReason && (status === 'request_cancelation' || status === 'cancelled') && (
+        <Detail label={status === 'cancelled' ? 'Why cancelled' : 'Why cancel'}>{event.cancelReason}</Detail>
+      )}
+      {event.rejectCount > 0 && status !== 'completed' && (
+        <Detail label="Sent back">
+          <span className="tabular-nums">
+            {event.rejectCount} {event.rejectCount === 1 ? 'time' : 'times'}
+          </span>
+        </Detail>
+      )}
+      {event.completionRemarks && <Detail label="Completion notes">{event.completionRemarks}</Detail>}
+    </Panel>
+  )
+}
 
 /** A meeting link with Copy (✓ once copied) and Open (new tab) beside it. */
 function LocationLink({ url }: { url: string }) {

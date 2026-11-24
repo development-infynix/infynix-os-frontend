@@ -1,9 +1,58 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 
-export type CalendarEventType = 'announcement' | 'meeting'
-/** Derived from the time window on every read: upcoming, live, ended, or cancelled. */
-export type EffectiveStatus = 'upcoming' | 'live' | 'ended' | 'cancelled'
+export type CalendarEventType = 'announcement' | 'meeting' | 'task'
+/** Announcements and meetings: derived from the time window on every read. */
+export type TimeStatus = 'upcoming' | 'live' | 'ended' | 'cancelled'
+/** Tasks: the workflow status (T1); failed and an ended hold follow the clock (T8). */
+export type TaskStatus =
+  | 'assigned'
+  | 'progress'
+  | 'on_review'
+  | 'on_hold'
+  | 'request_cancelation'
+  | 'cancelled'
+  | 'failed'
+  | 'completed'
+export type EffectiveStatus = TimeStatus | TaskStatus
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
+
+/** The workflow steps (backend `task-workflow.ts`). */
+export type TaskAction =
+  | 'start'
+  | 'submit'
+  | 'complete'
+  | 'hold'
+  | 'resume'
+  | 'approve'
+  | 'reject'
+  | 'request_cancel'
+  | 'approve_cancel'
+  | 'decline_cancel'
+  | 'withdraw_cancel'
+  | 'cancel'
+  | 'extend'
+  | 'reopen'
+  | 'request_extension'
+  | 'approve_extension'
+  | 'decline_extension'
+  | 'withdraw_extension'
+export type TaskField =
+  | 'holdReason'
+  | 'holdUntil'
+  | 'cancelReason'
+  | 'completionRemarks'
+  | 'note'
+  | 'deadline'
+  | 'extensionUntil'
+  | 'extensionReason'
+
+/** A step the viewer may take now, with its inputs (the server decides). */
+export interface AllowedTaskAction {
+  action: TaskAction
+  to: TaskStatus
+  fields: Partial<Record<TaskField, 'required' | 'optional'>>
+}
 
 export interface CalendarPersonRef {
   id: string
@@ -15,7 +64,8 @@ export interface CalendarEvent {
   type: CalendarEventType
   title: string
   description: string | null
-  status: 'scheduled' | 'cancelled'
+  /** Stored: scheduled | cancelled, or a task's TaskStatus. */
+  status: 'scheduled' | 'cancelled' | TaskStatus
   effectiveStatus: EffectiveStatus
   startsAt: string
   endsAt: string
@@ -31,7 +81,25 @@ export interface CalendarEvent {
   createdByName: string | null
   createdAt: string
   updatedAt: string
-  permissions: { canEdit: boolean; canCancel: boolean; canRestore: boolean; canDelete: boolean }
+  permissions: {
+    canEdit: boolean
+    canCancel: boolean
+    canRestore: boolean
+    canDelete: boolean
+    /** Task only: the steps the viewer may take. */
+    actions: AllowedTaskAction[]
+  }
+  /* ---- Task only (endsAt is the deadline) ---- */
+  assigneeId: string | null
+  assigneeName: string | null
+  priority: TaskPriority | null
+  previousStatus: TaskStatus | null
+  holdReason: string | null
+  holdUntil: string | null
+  completionRemarks: string | null
+  rejectCount: number
+  extensionUntil: string | null
+  extensionReason: string | null
 }
 
 export interface CalendarContext {
@@ -55,6 +123,14 @@ export interface CalendarEventInput {
   location?: string
   visibility?: 'open' | 'private'
   memberIds?: string[]
+}
+
+export interface TaskInput {
+  title: string
+  description?: string
+  deadline: string
+  assigneeId: string
+  priority: TaskPriority
 }
 
 /** Everything under Calendar: invalidate after any change. */
@@ -88,18 +164,31 @@ export const calendarEventQuery = (id: string) =>
     retry: false,
   })
 
-/** People who can be invited (they can open the Calendar); server-side search. */
-export const calendarPeopleQuery = (query: string) =>
+/**
+ * People who can open the Calendar; server-side search. `assign` narrows it to
+ * whom the viewer may give a task (owner: anyone; manager: staff and self).
+ */
+export const calendarPeopleQuery = (query: string, purpose: 'invite' | 'assign' = 'invite') =>
   queryOptions({
-    queryKey: [...CALENDAR_KEY, 'people', query],
+    queryKey: [...CALENDAR_KEY, 'people', purpose, query],
     queryFn: () =>
-      api<{ items: CalendarPerson[] }>(`/calendar/people?limit=20&q=${encodeURIComponent(query)}`).then((r) => r.items),
+      api<{ items: CalendarPerson[] }>(
+        `/calendar/people?limit=20&for=${purpose}&q=${encodeURIComponent(query)}`,
+      ).then((r) => r.items),
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   })
 
-export const createCalendarEvent = (body: CalendarEventInput & { type: CalendarEventType }) =>
-  api<CalendarEvent>('/calendar', { method: 'POST', body: JSON.stringify(body) })
+export const createCalendarEvent = (
+  body: (CalendarEventInput & { type: 'announcement' | 'meeting' }) | (TaskInput & { type: 'task' }),
+) => api<CalendarEvent>('/calendar', { method: 'POST', body: JSON.stringify(body) })
+
+export const updateTask = (id: string, body: Partial<TaskInput> & { version: number }) =>
+  api<CalendarEvent>(`/calendar/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+
+/** One workflow step with its inputs. */
+export const stepTask = (id: string, version: number, action: TaskAction, input: Partial<Record<TaskField, string>>) =>
+  api<CalendarEvent>(`/calendar/${id}`, { method: 'PATCH', body: JSON.stringify({ version, action, ...input }) })
 
 export const updateCalendarEvent = (id: string, body: Partial<CalendarEventInput> & { version: number }) =>
   api<CalendarEvent>(`/calendar/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
@@ -119,6 +208,7 @@ export const deleteCalendarEvent = (id: string) => api<void>(`/calendar/${id}`, 
 export const TYPE_LABEL: Record<CalendarEventType, string> = {
   announcement: 'Announcement',
   meeting: 'Meeting',
+  task: 'Task',
 }
 
 export const STATUS_LABEL: Record<EffectiveStatus, string> = {
@@ -126,4 +216,18 @@ export const STATUS_LABEL: Record<EffectiveStatus, string> = {
   live: 'Live now',
   ended: 'Ended',
   cancelled: 'Cancelled',
+  assigned: 'Assigned',
+  progress: 'In progress',
+  on_review: 'In review',
+  on_hold: 'On hold',
+  request_cancelation: 'Cancel requested',
+  failed: 'Failed',
+  completed: 'Completed',
+}
+
+export const PRIORITY_LABEL: Record<TaskPriority, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  urgent: 'Urgent',
 }
