@@ -182,11 +182,17 @@ function StepForm({
     return start
   })
   const [missing, setMissing] = useState<TaskField | null>(null)
+  const [past, setPast] = useState<TaskField | null>(null)
 
   function submit() {
     const gap = names.find((name) => required(name) && !values[name]?.trim())
     setMissing(gap ?? null)
-    if (gap) return
+    // Every date a step takes (hold end, new or proposed deadline) must be ahead of now.
+    const late = gap
+      ? undefined
+      : names.find((name) => FIELDS[name].kind === 'datetime' && values[name] && Date.parse(values[name]!) <= Date.now())
+    setPast(late ?? null)
+    if (gap || late) return
     const input: Partial<Record<TaskField, string>> = {}
     for (const name of names) {
       const value = values[name]?.trim()
@@ -210,6 +216,7 @@ function StepForm({
         const field = FIELDS[name]
         const id = `step-${name}`
         const isMissing = missing === name
+        const isPast = past === name
         return (
           <div key={name}>
             <label htmlFor={id} className="block text-label font-medium text-ink-2">
@@ -231,12 +238,15 @@ function StepForm({
                 id={id}
                 value={values[name] ?? ''}
                 timezone={timezone}
-                invalid={isMissing}
+                invalid={isMissing || isPast}
+                now={now}
                 onChange={(iso) => setValues((v) => ({ ...v, [name]: iso }))}
               />
             )}
-            {isMissing ? (
-              <p className="mt-1 text-caption text-danger">This is needed.</p>
+            {isMissing || isPast ? (
+              <p className="mt-1 text-caption text-danger">
+                {isMissing ? 'This is needed.' : 'Pick a time in the future.'}
+              </p>
             ) : (
               field.hint && <p className="mt-1 text-caption text-ink-3">{field.hint}</p>
             )}
@@ -261,15 +271,19 @@ function ZonedDateTime({
   value,
   timezone,
   invalid,
+  now,
   onChange,
 }: {
   id: string
   value: string
   timezone: string
   invalid: boolean
+  /** The live clock: no date or time before it can be picked. */
+  now: number
   onChange: (iso: string) => void
 }) {
   const parts = value ? wallParts(Date.parse(value), timezone) : { date: '', time: '' }
+  const today = wallParts(now, timezone)
   const [date, setDate] = useState(parts.date)
   const [time, setTime] = useState(parts.time || '18:00')
   const emit = (d: string, t: string) => onChange(d && t ? zonedInstant(d, t, timezone).toISOString() : '')
@@ -279,6 +293,7 @@ function ZonedDateTime({
         id={id}
         type="date"
         value={date}
+        min={today.date}
         onChange={(e) => {
           setDate(e.target.value)
           emit(e.target.value, time)
@@ -290,6 +305,7 @@ function ZonedDateTime({
         type="time"
         aria-label="Time"
         value={time}
+        min={date === today.date ? today.time : undefined}
         onChange={(e) => {
           setTime(e.target.value)
           emit(date, e.target.value)

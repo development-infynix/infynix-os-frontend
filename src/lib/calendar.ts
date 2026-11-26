@@ -21,6 +21,17 @@ export function addDays(day: string, n: number): string {
 /** `YYYY-MM` of a day. */
 export const monthOf = (day: string) => day.slice(0, 7)
 
+/**
+ * `day`'s date in `month`: the same day number, clamped to that month's last
+ * day, so 31 Jan → 28 Feb. Switching months carries the selected day along.
+ */
+export function dateInMonth(day: string, month: string): string {
+  const { date } = parts(day)
+  const [year, m] = month.split('-').map(Number)
+  const lastDay = new Date(Date.UTC(year, m, 0)).getUTCDate()
+  return toIsoDay(year, m - 1, Math.min(date, lastDay))
+}
+
 /** `month` moved by `n` months. */
 export function addMonths(month: string, n: number): string {
   const [year, m] = month.split('-').map(Number)

@@ -46,8 +46,22 @@ interface FieldErrors {
  * the company timezone, priority and details. Staff only assign to
  * themselves, so they don't get a picker. Reassigning starts the task over.
  */
+/**
+ * A new task's deadline: 18:00 on the picked day, but never in the past. A
+ * past day moves to today, and on today after 18:00 it's due in an hour.
+ */
+function newDeadline(day: string, now: { date: string; time: string }, timezone: string) {
+  const date = day < now.date ? now.date : day
+  if (date === now.date && now.time >= '18:00') {
+    return wallParts(zonedInstant(now.date, now.time, timezone).getTime() + 60 * 60_000, timezone)
+  }
+  return { date, time: '18:00' }
+}
+
 export function TaskForm({ event, day, timezone, viewer, onCancel, onSubmit }: TaskFormProps) {
-  const due = event ? wallParts(Date.parse(event.endsAt), timezone) : { date: day, time: '18:00' }
+  // A deadline can't be in the past. Read the clock once when the form opens; Save checks again.
+  const [now] = useState(() => wallParts(Date.now(), timezone))
+  const due = event ? wallParts(Date.parse(event.endsAt), timezone) : newDeadline(day, now, timezone)
   const [title, setTitle] = useState(event?.title ?? '')
   const [date, setDate] = useState(due.date)
   const [time, setTime] = useState(due.time)
@@ -74,7 +88,9 @@ export function TaskForm({ event, day, timezone, viewer, onCancel, onSubmit }: T
     else {
       deadline = zonedInstant(date, time, timezone)
       const unchanged = event && deadline.getTime() === Date.parse(event.endsAt)
-      if (!unchanged && deadline.getTime() <= Date.now()) next.deadline = 'The deadline must be in the future'
+      if (!unchanged && deadline.getTime() <= Date.now()) {
+        next.deadline = `The deadline must be in the future. It’s ${wallParts(Date.now(), timezone).time} now.`
+      }
     }
     setErrors(next)
     if (Object.keys(next).length || !deadline || !assignee) return
@@ -150,6 +166,7 @@ export function TaskForm({ event, day, timezone, viewer, onCancel, onSubmit }: T
               type="date"
               aria-label="Deadline date"
               value={date}
+              min={now.date}
               onChange={(e) => setDate(e.target.value)}
               aria-invalid={!!errors.deadline}
               className="field-input tabular-nums"
@@ -158,6 +175,7 @@ export function TaskForm({ event, day, timezone, viewer, onCancel, onSubmit }: T
               type="time"
               aria-label="Deadline time"
               value={time}
+              min={date === now.date ? now.time : undefined}
               onChange={(e) => setTime(e.target.value)}
               aria-invalid={!!errors.deadline}
               className="field-input tabular-nums"

@@ -30,6 +30,20 @@ interface EventFormProps {
   onSubmit: (input: CalendarEventInput, step: StatusStep | null) => Promise<void>
 }
 
+/**
+ * Where a new event starts: its usual time on the picked day (09:00 for an
+ * announcement, 10:00 for a meeting), but never in the past. On today after
+ * that time it starts now; a past day moves to today.
+ */
+function newStart(day: string, usual: string, now: { date: string; time: string }) {
+  if (day < now.date) return { date: now.date, time: now.time }
+  if (day === now.date && now.time > usual) return { date: day, time: now.time }
+  return { date: day, time: usual }
+}
+
+const plusMinutes = (at: { date: string; time: string }, minutes: number, timezone: string) =>
+  wallParts(zonedInstant(at.date, at.time, timezone).getTime() + minutes * 60_000, timezone)
+
 export type StatusStep = { action: 'cancel'; reason: string } | { action: 'restore' }
 
 /** The four statuses, in the order the Status field shows them. */
@@ -50,10 +64,21 @@ interface FieldErrors {
 /** Create and edit share this form; announcements and meetings differ only in their fields. */
 export function EventForm({ type, event, day, timezone, canChangeVisibility, onCancel, onSubmit }: EventFormProps) {
   const isMeeting = type === 'meeting'
-  const start = event ? wallParts(Date.parse(event.startsAt), timezone) : { date: day, time: isMeeting ? '10:00' : '09:00' }
+  // Nothing can start in the past (to the minute, in the company zone).
+  // Read once when the form opens; Save checks against the clock again.
+  const [now] = useState(() => wallParts(Date.now(), timezone))
+  const start = event
+    ? wallParts(Date.parse(event.startsAt), timezone)
+    : newStart(day, isMeeting ? '10:00' : '09:00', now)
   const end = event
     ? wallParts(Date.parse(event.endsAt), timezone)
-    : { date: day, time: isMeeting ? '10:30' : '18:00' }
+    : isMeeting
+      ? plusMinutes(start, 30, timezone)
+      : start.time < '18:00'
+        ? { date: start.date, time: '18:00' }
+        : plusMinutes(start, 60, timezone)
+  // Only a new event, or one whose start is being moved, is held to "not before now".
+  const originalStart = event ? Date.parse(event.startsAt) : null
 
   const [title, setTitle] = useState(event?.title ?? '')
   const [startDate, setStartDate] = useState(start.date)
@@ -99,6 +124,12 @@ export function EventForm({ type, event, day, timezone, canChangeVisibility, onC
       minutes = Math.round((zonedInstant(endDate, endTime, timezone).getTime() - startsAt.getTime()) / 60_000)
       if (minutes <= 0) next.when = 'It has to end after it starts'
       else if (minutes > MAX_MINUTES) next.when = 'An event can last at most 62 days'
+      else if (
+        startsAt.getTime() !== originalStart &&
+        startsAt.getTime() < Math.floor(Date.now() / 60_000) * 60_000
+      ) {
+        next.when = `It can’t start in the past. It’s ${wallParts(Date.now(), timezone).time} now.`
+      }
     }
     if (!isMeeting && !description.trim()) next.description = 'Write the announcement'
     if (isMeeting && !location.trim()) next.location = 'Add a room, an address or a link'
@@ -210,6 +241,7 @@ export function EventForm({ type, event, day, timezone, canChangeVisibility, onC
               type="date"
               aria-label="Start date"
               value={startDate}
+              min={now.date}
               onChange={(e) => moveStart(e.target.value, startTime)}
               className="field-input tabular-nums"
             />
@@ -217,6 +249,7 @@ export function EventForm({ type, event, day, timezone, canChangeVisibility, onC
               type="time"
               aria-label="Start time"
               value={startTime}
+              min={startDate === now.date ? now.time : undefined}
               onChange={(e) => moveStart(startDate, e.target.value)}
               className="field-input tabular-nums"
             />

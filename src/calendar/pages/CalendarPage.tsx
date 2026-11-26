@@ -7,7 +7,7 @@ import { Button } from '@/components/Button'
 import { Loader } from '@/components/Loader'
 import { MonthCalendar } from '@/components/MonthCalendar'
 import { useSession } from '@/lib/auth'
-import { addMonths, formatMonth, monthGrid, monthOf } from '@/lib/calendar'
+import { addMonths, dateInMonth, formatMonth, monthGrid, monthOf } from '@/lib/calendar'
 import {
   CALENDAR_KEY,
   TYPE_LABEL,
@@ -74,6 +74,9 @@ export function CalendarPage() {
       replace: next.event === undefined,
     })
   const selectDay = (day: string) => setSearch({ date: day, month: monthOf(day) })
+  /** A month switch carries the selected day along: the same date in the new month. */
+  const switchMonth = (next: string) =>
+    setSearch({ month: next, date: date ? dateInMonth(date, next) : `${next}-01` })
 
   // The six weeks on screen, with a day of slack each side: the server works in
   // instants and the grid in company days, so a little extra never misses one.
@@ -246,7 +249,7 @@ export function CalendarPage() {
 
         <div className="flex min-h-9 items-center justify-between gap-2 lg:col-start-2 lg:row-start-1 lg:justify-end">
           <div className="flex items-center gap-2 lg:order-2">
-            <MonthSwitcher month={month} onChange={(next) => setSearch({ month: next })} />
+            <MonthSwitcher month={month} onChange={switchMonth} />
           </div>
           <div className="flex items-center gap-2 lg:order-1">
             {(date !== context.today || month !== monthOf(context.today)) && (
